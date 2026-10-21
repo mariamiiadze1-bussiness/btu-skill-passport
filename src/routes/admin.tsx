@@ -73,7 +73,7 @@ function Admin() {
             const done = generated.includes(pid);
             return (
               <div key={pid} className="rounded-xl border p-4">
-                <p className="font-bold">{items[0].student} <span className="font-mono text-xs font-normal text-muted-foreground">{pid}</span></p>
+                <p className="font-bold">{items[0]?.student} <span className="font-mono text-xs font-normal text-muted-foreground">{pid}</span></p>
                 <ul className="mt-3 space-y-3">
                   {items.map((r) => (
                     <li key={r.id} className="flex flex-wrap items-center gap-3">
