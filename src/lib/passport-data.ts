@@ -48,7 +48,12 @@ export const versions: PassportVersion[] = [
 
 export const latestVersion = versions.find((v) => v.status === "active")!;
 
-export function formatDate(iso: string) {
+export function formatDate(iso: string, language: "en" | "ka" = "en") {
+  if (language === "ka") {
+    const date = new Date(iso + "T00:00:00");
+    const months = ["იან", "თებ", "მარ", "აპრ", "მაი", "ივნ", "ივლ", "აგვ", "სექ", "ოქტ", "ნოე", "დეკ"];
+    return `${String(date.getDate()).padStart(2, "0")} ${months[date.getMonth()]} ${date.getFullYear()}`;
+  }
   return new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 

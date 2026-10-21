@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as PassportVersionRouteImport } from './routes/passport.$version'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VerifyRoute = VerifyRouteImport.update({
@@ -38,12 +44,14 @@ const PassportVersionRoute = PassportVersionRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/verify': typeof VerifyRoute
   '/passport/$version': typeof PassportVersionRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/verify': typeof VerifyRoute
   '/passport/$version': typeof PassportVersionRoute
 }
@@ -51,20 +59,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/verify': typeof VerifyRoute
   '/passport/$version': typeof PassportVersionRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/verify' | '/passport/$version'
+  fullPaths: '/' | '/admin' | '/auth' | '/verify' | '/passport/$version'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/verify' | '/passport/$version'
-  id: '__root__' | '/' | '/admin' | '/verify' | '/passport/$version'
+  to: '/' | '/admin' | '/auth' | '/verify' | '/passport/$version'
+  id: '__root__' | '/' | '/admin' | '/auth' | '/verify' | '/passport/$version'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  AuthRoute: typeof AuthRoute
   VerifyRoute: typeof VerifyRoute
   PassportVersionRoute: typeof PassportVersionRoute
 }
@@ -83,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/verify': {
@@ -105,6 +122,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  AuthRoute: AuthRoute,
   VerifyRoute: VerifyRoute,
   PassportVersionRoute: PassportVersionRoute,
 }
