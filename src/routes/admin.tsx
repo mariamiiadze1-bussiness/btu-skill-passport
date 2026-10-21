@@ -1,18 +1,14 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { AppShell } from "@/components/passport/AppShell";
-import { Stamp } from "@/components/passport/Stamp";
 import {
   addStudentSkill,
-  generateStudentPassport,
   getAdminData,
   retryBlockchain,
-  reviewSkillDecision,
   syncNow,
   uploadRegistryExcel,
 } from "@/lib/api";
-import { formatDate, TYPE_LABEL, type ActivityStatus } from "@/lib/passport-data";
-import { passportSkillType } from "@/lib/passport-session";
+import { formatDate, type ActivityStatus } from "@/lib/passport-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/admin")({
@@ -102,11 +98,10 @@ function Admin() {
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {([
           ["Students", data.counts.students],
           ["Issued passports", data.counts.passports],
-          ["Awaiting review", data.counts.awaitingReview],
           ["Blockchain queue", data.counts.queued],
           ["Sync errors", data.counts.failedRecords],
         ] as const).map(([label, value]) => (
@@ -121,40 +116,6 @@ function Admin() {
 
       <AddSkillPanel data={data} busy={busy} onSubmit={(values) => run("add", () => addStudentSkill({ data: values }), (r: { version: number | null }) => `Skill added. Passport v${r.version} issued.`)} />
 
-      {data.reviews.length > 0 && (
-        <section className={panel}>
-          <h2 className="text-xl">{t("Review confirmed skills")}</h2>
-          <p className="text-sm text-muted-foreground">{t("Awards imported as PENDING wait here. Approve or reject each, then issue the updated passport.")}</p>
-          <div className="mt-4 space-y-5">
-            {data.reviews.map((r) => (
-              <div key={r.studentId} className="rounded-xl border p-4">
-                <p className="font-bold">{r.student} <span className="font-mono text-xs font-normal text-muted-foreground">{r.passportId}</span></p>
-                <ul className="mt-3 space-y-3">
-                  {r.pending.map((skill) => {
-                    const type = passportSkillType(skill.category);
-                    return (
-                      <li key={skill.id} className="flex flex-wrap items-center gap-3">
-                        <Stamp type={type} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-bold uppercase">{t(skill.name)}</p>
-                          <p className="text-xs text-muted-foreground">{t(TYPE_LABEL[type])} · {skill.earnedThrough || skill.source} · {skill.dateEarned}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button disabled={!!busy} onClick={() => void run(skill.id, () => reviewSkillDecision({ data: { skillId: skill.id, decision: "approved" } }), () => "Approved.")} className="rounded-full bg-success px-3 py-1 text-xs font-bold uppercase text-destructive-foreground disabled:opacity-50">{t("Approve")}</button>
-                          <button disabled={!!busy} onClick={() => void run(skill.id, () => reviewSkillDecision({ data: { skillId: skill.id, decision: "rejected" } }), () => "Rejected.")} className="rounded-full border-2 border-foreground px-3 py-0.5 text-xs font-bold uppercase disabled:opacity-50">{t("Reject")}</button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <button disabled={!!busy || r.pending.length > 0} onClick={() => void run(r.studentId, () => generateStudentPassport({ data: { studentId: r.studentId } }), (x: { version: number | null }) => `Passport v${x.version} issued.`)} className={`${button} mt-4 bg-primary text-primary-foreground`}>
-                  {busy === r.studentId ? t("Generating…") : t("Issue updated passport")}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       <BlockchainPanel data={data} busy={busy} onRetry={() => run("anchor", () => retryBlockchain(), (r: { anchored: number; unanchored: number; error: string | null }) => r.error ?? `${r.anchored + r.unanchored} versions finalized.`)} />
 

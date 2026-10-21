@@ -43,8 +43,6 @@ const id = z
   .trim()
   .toUpperCase()
   .regex(/^[A-Z0-9][A-Z0-9-]{2,39}$/);
-export const reviewSchema = z.object({ skillId: id, decision: z.enum(["approved", "rejected"]) });
-export const studentSchema = z.object({ studentId: id });
 const printable = (max: number) =>
   z
     .string()
@@ -64,13 +62,6 @@ export const addSkillSchema = z.object({
 
 export async function getAdminOverview(db: Db, user: SessionUser | null) {
   requireAdmin(user);
-
-  const pending = await db
-    .select({ skill: skills, student: students })
-    .from(skills)
-    .innerJoin(students, eq(students.id, skills.studentId))
-    .where(eq(skills.status, "pending"))
-    .orderBy(students.lastName, skills.createdAt);
 
   const studentRows = await db
     .select()
@@ -143,7 +134,6 @@ export async function getAdminOverview(db: Db, user: SessionUser | null) {
     counts: {
       students: studentRows.length,
       passports: latest.size,
-      awaitingReview: pending.length,
       queued: queue?.n ?? 0,
       failedRecords: failedRecords.length,
     },
@@ -189,41 +179,6 @@ export async function getAdminOverview(db: Db, user: SessionUser | null) {
         at: b.createdAt.toISOString(),
       })),
     },
-    reviews: Object.values(
-      pending.reduce<
-        Record<
-          string,
-          {
-            studentId: string;
-            student: string;
-            passportId: string;
-            pending: {
-              id: string;
-              name: string;
-              category: string;
-              source: string;
-              earnedThrough: string;
-              dateEarned: string;
-            }[];
-          }
-        >
-      >((acc, { skill, student }) => {
-        (acc[student.id] ??= {
-          studentId: student.id,
-          student: `${student.firstName} ${student.lastName}`,
-          passportId: student.passportId,
-          pending: [],
-        }).pending.push({
-          id: skill.id,
-          name: skill.name,
-          category: skill.category,
-          source: skill.source,
-          earnedThrough: skill.earnedThrough,
-          dateEarned: skill.dateEarned,
-        });
-        return acc;
-      }, {}),
-    ),
     students: studentRows.map((s) => ({
       id: s.id,
       name: `${s.firstName} ${s.lastName}`,
@@ -361,40 +316,6 @@ export async function addSkill(db: Db, user: SessionUser | null, input: unknown)
     status: "completed",
   });
   const [issued] = await issueVersions(db, [student.id]);
-  const anchor = await anchorPending(db);
-  return { version: issued?.version ?? null, anchorError: anchor.error };
-}
-
-/** Awards that arrive as PENDING wait here for a decision. */
-export async function reviewSkill(db: Db, user: SessionUser | null, input: unknown) {
-  requireAdmin(user);
-  const { skillId, decision } = reviewSchema.parse(input);
-  const [updated] = await db
-    .update(skills)
-    .set({ status: decision, reviewedBy: user.id, reviewedAt: new Date() })
-    .where(and(eq(skills.id, skillId), eq(skills.status, "pending")))
-    .returning();
-  if (!updated) throw new UserError("This skill was already reviewed or does not exist.");
-  await db.insert(activityLog).values({
-    studentId: updated.studentId,
-    actorUserId: user.id,
-    action: `Skill ${decision}: ${updated.name}`,
-    status: "completed",
-  });
-  return { skillId, decision };
-}
-
-/** Issue a new version for one student (e.g. after reviewing their pending awards). */
-export async function issueStudentPassport(db: Db, user: SessionUser | null, input: unknown) {
-  requireAdmin(user);
-  const { studentId } = studentSchema.parse(input);
-  const [stillPending] = await db
-    .select({ n: count() })
-    .from(skills)
-    .where(and(eq(skills.studentId, studentId), eq(skills.status, "pending")));
-  if ((stillPending?.n ?? 0) > 0)
-    throw new UserError("Review every pending skill before generating the passport.");
-  const [issued] = await issueVersions(db, [studentId]);
   const anchor = await anchorPending(db);
   return { version: issued?.version ?? null, anchorError: anchor.error };
 }

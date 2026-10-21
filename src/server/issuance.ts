@@ -8,6 +8,7 @@ import { signLeaf } from "./issuer";
 import { buildMerkleTree, versionLeaf } from "./merkle";
 import { notifyIssued } from "./notifications";
 import { generatePassportPdf } from "./pdf/generate";
+import { isSelfRegistered } from "./students";
 import { activityLog, anchorBatches, locks, passportVersions, skills, students } from "./schema";
 
 /** Statuses that make a version an officially issued document. */
@@ -71,6 +72,13 @@ export async function issueVersions(db: Db, studentIds: string[], now = new Date
         .from(passportVersions)
         .where(eq(passportVersions.studentId, studentId));
       const version = (latest ?? 0) + 1;
+      if (version === 1 && isSelfRegistered(studentId)) {
+        await tx
+          .update(students)
+          .set({ issuedAt: today(now) })
+          .where(eq(students.id, studentId));
+        student.issuedAt = today(now);
+      }
       const verificationCode = newVerificationCode();
       // Version 1 carries the passport's fixed first-issue date; later versions the update date.
       const issuedOn = version === 1 ? student.issuedAt : today(now);

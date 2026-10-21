@@ -5,9 +5,7 @@ import {
   addSkill,
   getAdminOverview,
   importExcel,
-  issueStudentPassport,
   retryAnchoring,
-  reviewSkill,
   syncRegistry,
 } from "@/server/admin";
 import { getSessionUser, login, logout, register, SESSION_TTL_SECONDS } from "@/server/auth";
@@ -165,17 +163,7 @@ export const addStudentSkill = createServerFn({ method: "POST" })
   .validator(asObject)
   .handler(({ data }) => guarded(async () => addSkill(await getDb(), await currentUser(), data)));
 
-export const reviewSkillDecision = createServerFn({ method: "POST" })
-  .validator(asObject)
-  .handler(({ data }) =>
-    guarded(async () => reviewSkill(await getDb(), await currentUser(), data)),
-  );
 
-export const generateStudentPassport = createServerFn({ method: "POST" })
-  .validator(asObject)
-  .handler(({ data }) =>
-    guarded(async () => issueStudentPassport(await getDb(), await currentUser(), data)),
-  );
 
 export const retryBlockchain = createServerFn({ method: "POST" }).handler(() =>
   guarded(async () => retryAnchoring(await getDb(), await currentUser())),

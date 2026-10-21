@@ -8,13 +8,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import {
-  addSkill,
-  ForbiddenError,
-  getAdminOverview,
-  importExcel,
-  issueStudentPassport,
-} from "@/server/admin";
+import { addSkill, ForbiddenError, getAdminOverview, importExcel } from "@/server/admin";
 import { setAnchorProvider, type AnchorProvider } from "@/server/anchoring";
 import {
   AuthError,
@@ -538,7 +532,7 @@ describe("sign in and registration (spec §9)", () => {
     expect(await getSessionUser(db, token)).toBeNull();
   });
 
-  it("quick registration creates an empty passport with the student's own name", async () => {
+  it("quick registration reserves a passport that BTU has not issued yet", async () => {
     const token = await register(
       db,
       {
@@ -556,7 +550,42 @@ describe("sign in and registration (spec §9)", () => {
       lastName: "Chikovani-Dadeshkeliani",
       passportId: "BTU-AI-000143",
     });
-    expect(p.versions[0]).toMatchObject({ version: 1, skills: [] });
+    // Not signed or anchored until BTU's data confirms the student (spec stage 1-3, section 6).
+    expect(p.versions).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(schema.passportVersions)
+        .where(eq(schema.passportVersions.studentId, user.studentId!)),
+    ).toHaveLength(0);
+  });
+
+  it("issues a reserved passport once an administrator confirms the student's first skill", async () => {
+    const token = await register(
+      db,
+      {
+        email: "reserved@btu.edu.ge",
+        password: "long-enough-pw",
+        firstName: "Ana",
+        lastName: "Reserved",
+      },
+      "r",
+    );
+    const studentId = (await getSessionUser(db, token))!.studentId!;
+    const admin = (await sessionFor(ADMIN))!;
+    expect(
+      (
+        await addSkill(db, admin, {
+          studentId,
+          catalogSkillId: "SKL-001",
+          dateEarned: "2026-10-21",
+        })
+      ).version,
+    ).toBe(1);
+    expect((await passport(studentId)).versions[0]).toMatchObject({
+      version: 1,
+      skills: [expect.objectContaining({ name: "AI Literacy" })],
+    });
   });
 
   it("later matches a self-registered student to their BTU Student ID by email", async () => {
@@ -573,7 +602,7 @@ describe("sign in and registration (spec §9)", () => {
     const r = await runSync(db, withRow(giorgiRow(newStudent)), { source: "test" });
     expect(r.outcomes.find((o) => o.recordId === "REC-0900")).toMatchObject({
       status: "synced",
-      version: 2,
+      version: 1,
     });
     expect((await getSessionUser(db, token))!.studentId).toBe("BTU-T-0099");
   });
@@ -684,9 +713,6 @@ describe("admin panel", () => {
           dateEarned: "2026-10-01",
         }),
       ).rejects.toBeInstanceOf(ForbiddenError);
-      await expect(
-        issueStudentPassport(db, user, { studentId: "BTU-T-0001" }),
-      ).rejects.toBeInstanceOf(ForbiddenError);
       await expect(importExcel(db, user, null)).rejects.toBeInstanceOf(ForbiddenError);
     }
   });
@@ -720,7 +746,6 @@ describe("admin panel", () => {
 
   it("rejects injected input", async () => {
     for (const p of INJECTIONS) {
-      await expect(issueStudentPassport(db, admin, { studentId: p })).rejects.toThrow();
       await expect(
         addSkill(db, admin, { studentId: p, catalogSkillId: "SKL-001", dateEarned: "2026-10-01" }),
       ).rejects.toThrow();
@@ -746,5 +771,181 @@ describe("student notifications", () => {
     expect(notes[0]!.body).toContain("AI Data Analysis");
     await markNotificationsRead(db, "BTU-T-0001");
     expect(await unreadNotifications(db, "BTU-T-0001")).toHaveLength(0);
+  });
+});
+
+describe("registry layouts and the workbook's rules", () => {
+  /** BTU's test data rearranged into the brief's three registries (Students, Skills Catalog, Verified Skills). */
+  function threeTabWorkbook(extraAwards: string[][] = [], extraStudents: string[][] = []) {
+    const col = (h: Header) => TEST_SHEET_HEADER.indexOf(h);
+    const studentRows = new Map<string, string[]>();
+    const catalog = new Map<string, string[]>();
+    for (const r of TEST_SHEET_ROWS) {
+      studentRows.set(r[col("Student ID")]!, [
+        r[col("Student ID")]!,
+        r[col("First Name")]!,
+        r[col("Last Name")]!,
+        r[col("BTU Email (Test)")]!,
+        r[col("Passport ID (Existing)")]!,
+        r[col("First Issued (Existing)")]!,
+      ]);
+      catalog.set(r[col("Skill ID")]!, [
+        r[col("Skill ID")]!,
+        r[col("Skill Name")]!,
+        r[col("Skill Category")]!,
+        r[col("Skill Description")]!,
+      ]);
+    }
+    return {
+      tabs: [
+        {
+          name: "Students",
+          rows: [
+            ["Student ID", "First Name", "Last Name", "BTU Email", "Passport ID", "First Issued"],
+            ...studentRows.values(),
+            ...extraStudents,
+          ],
+        },
+        {
+          name: "Skills Catalog",
+          rows: [
+            ["Skill ID", "Skill Name", "Skill Category", "Skill Description"],
+            ...catalog.values(),
+          ],
+        },
+        {
+          name: "Verified Skills",
+          rows: [
+            ["Record ID", "Student ID", "Skill ID", "Date Earned", "Status"],
+            ...TEST_SHEET_ROWS.map((r) => [
+              r[col("Record ID")]!,
+              r[col("Student ID")]!,
+              r[col("Skill ID")]!,
+              r[col("Date Earned")]!,
+              "CONFIRMED",
+            ]),
+            ...extraAwards,
+          ],
+        },
+      ],
+    };
+  }
+
+  it("syncs the three-registry layout exactly like the combined sheet", async () => {
+    const r = await runSync(db, threeTabWorkbook(), { source: "test" });
+    expect(r.totals).toMatchObject({ synced: 44, alreadySynced: 16, failed: 0 });
+    expect((await passport("BTU-T-0001")).versions[0]!.skills).toHaveLength(4);
+  });
+
+  it("stops awards for unknown students or skills, and ignores PENDING / REJECTED", async () => {
+    const r = await runSync(
+      db,
+      threeTabWorkbook([
+        ["REC-0901", "BTU-T-0777", "SKL-001", "2026-10-20", "CONFIRMED"],
+        ["REC-0902", "BTU-T-0001", "SKL-999", "2026-10-20", "CONFIRMED"],
+        ["REC-0903", "BTU-T-0001", "SKL-013", "2026-10-20", "PENDING"],
+        ["REC-0904", "BTU-T-0001", "SKL-012", "2026-10-20", "REJECTED"],
+      ]),
+      { source: "test" },
+    );
+    const by = (id: string) => r.outcomes.find((o) => o.recordId === id)!;
+    expect(by("REC-0901")).toMatchObject({
+      status: "failed",
+      message: expect.stringContaining("not in the Students registry"),
+    });
+    expect(by("REC-0902")).toMatchObject({
+      status: "failed",
+      message: expect.stringContaining("not in the Skills Catalog"),
+    });
+    expect(by("REC-0903")).toMatchObject({ status: "skipped" });
+    expect(by("REC-0904")).toMatchObject({ status: "skipped" });
+    const ids = (await passport("BTU-T-0001")).versions[0]!.skills.map((s) => s.id);
+    for (const id of ["REC-0901", "REC-0902", "REC-0903", "REC-0904"])
+      expect(ids).not.toContain(id);
+  });
+
+  it("adds a record once BTU changes its status from PENDING to CONFIRMED", async () => {
+    const award = (status: string) => [["REC-0905", "BTU-T-0001", "SKL-013", "2026-10-20", status]];
+    const first = await runSync(db, threeTabWorkbook(award("PENDING")), { source: "test" });
+    expect(first.outcomes.find((o) => o.recordId === "REC-0905")).toMatchObject({
+      status: "skipped",
+    });
+    const second = await runSync(db, threeTabWorkbook(award("CONFIRMED")), { source: "test" });
+    expect(second.outcomes.find((o) => o.recordId === "REC-0905")).toMatchObject({
+      status: "synced",
+      version: 3,
+    });
+    expect((await passport("BTU-T-0001")).versions[0]!.added).toEqual([
+      "Natural Language Processing",
+    ]);
+  });
+
+  it("issues a passport to a new student in the Students registry even before any skill", async () => {
+    const r = await runSync(
+      db,
+      threeTabWorkbook([], [["BTU-T-0500", "Tekla", "Abesadze", "btu-t-0500@example.org", "", ""]]),
+      {
+        source: "test",
+      },
+    );
+    expect(r.passportIds["BTU-T-0500"]).toBe("BTU-AI-000143");
+    expect((await passport("BTU-T-0500")).versions[0]).toMatchObject({ version: 1, skills: [] });
+  });
+
+  it("enforces the completeness rule (A-M and O-Q populated)", async () => {
+    const cases: [Partial<Record<Header, string>>, RegExp][] = [
+      [{ Program: "" }, /Program is empty/],
+      [{ "Student Status": "" }, /Student Status is empty/],
+      [{ "Passport Sync Status": "" }, /Passport Sync Status is empty/],
+      [{ "Passport Sync Status": "DONE" }, /Passport Sync Status must be/],
+    ];
+    for (const [over, message] of cases) {
+      const r = await runSync(db, withRow(giorgiRow(over)), { source: "test" });
+      expect(r.outcomes.find((o) => o.sheetRow === EXTRA_ROW)).toMatchObject({
+        status: "failed",
+        message: expect.stringMatching(message),
+      });
+    }
+  });
+
+  it("writes the new Passport ID back to every row of a new student, and Q-T for each record", async () => {
+    const { writeBackCells } = await import("@/server/registry");
+    const literacy = {
+      "Skill ID": "SKL-001",
+      "Skill Name": "AI Literacy",
+      "Skill Category": "AI Skill",
+      "Badge/Stamp Code": "BDG-AI-001",
+      "Skill Description": "Fundamentals of AI capabilities, limitations, and responsible use.",
+    } as const;
+    const rows = [
+      giorgiRow({ ...newStudent, "Record ID": "REC-0910" }),
+      giorgiRow({ ...newStudent, ...literacy, "Record ID": "REC-0911" }),
+      giorgiRow({ ...newStudent, "Record ID": "REC-0912", "Skill Category": "Wrong" }),
+    ];
+    const workbook = {
+      tabs: [
+        { name: "Passport Skill Records", rows: [[...TEST_SHEET_HEADER], ...rows], firstRow: 3 },
+      ],
+    };
+    const result = await runSync(db, workbook, { source: "test" });
+    const cells = writeBackCells(workbook, result);
+    const at = (h: Header) => TEST_SHEET_HEADER.indexOf(h);
+    // All three rows, including the failed one, get the same permanent Passport ID.
+    expect(
+      cells.filter((c) => c.col === at("Passport ID (Existing)")).map((c) => [c.row, c.value]),
+    ).toEqual([
+      [4, "BTU-AI-000143"],
+      [5, "BTU-AI-000143"],
+      [6, "BTU-AI-000143"],
+    ]);
+    const value = (row: number, h: Header) =>
+      cells.find((c) => c.row === row && c.col === at(h))?.value;
+    expect([4, 5, 6].map((row) => value(row, "Passport Sync Status"))).toEqual([
+      "SYNCED",
+      "SYNCED",
+      "FAILED",
+    ]);
+    expect(value(4, "Synced Passport Version")).toBe("V1");
+    expect(value(6, "Sync Error / Notes")).toMatch(/Skill Category/);
   });
 });

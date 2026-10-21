@@ -1,39 +1,45 @@
 import { importPKCS8, SignJWT } from "jose";
 import readSheet from "read-excel-file/universal";
 
-import { TEST_SHEET_HEADER, TEST_SHEET_ROWS } from "../seed-data";
-import { COLUMNS, type CellValue, type Column, type SheetTable } from "./format";
-import type { RowOutcome } from "./sync";
 import { UserError } from "../errors";
+import { TEST_SHEET_HEADER, TEST_SHEET_ROWS } from "../seed-data";
+import { parseWorkbook, type CellValue, type Column, type Workbook } from "./format";
+import type { RowOutcome, SyncResult } from "./sync";
 
 /**
- * Where verified skill records come from. Each source returns the raw sheet table; parsing,
- * validation and syncing are shared. To add a source (e.g. a BTU API), implement RegistrySource.
+ * Where verified skill records come from. Each source returns the raw workbook (every tab);
+ * parsing, validation and syncing are shared. To add a source (e.g. a BTU API), implement this.
  */
 export interface RegistrySource {
   readonly id: string;
-  read(): Promise<SheetTable>;
-  /** Writes sync results back (columns G and Q–T). Optional: Excel uploads have nowhere to write. */
-  writeBack?(table: SheetTable, outcomes: RowOutcome[]): Promise<void>;
+  read(): Promise<Workbook>;
+  /** Writes results back (Passport ID and the sync columns). Excel uploads have nowhere to write. */
+  writeBack?(workbook: Workbook, result: SyncResult): Promise<void>;
 }
 
 /** The workbook BTU supplied for the hackathon, bundled for seeding and offline demos. */
 export const testWorkbookSource: RegistrySource = {
   id: "test-workbook",
-  read: async () => ({ rows: [[...TEST_SHEET_HEADER], ...TEST_SHEET_ROWS], firstRow: 3 }),
+  read: async () => ({
+    tabs: [
+      {
+        name: "Passport Skill Records",
+        rows: [[...TEST_SHEET_HEADER], ...TEST_SHEET_ROWS],
+        firstRow: 3,
+      },
+    ],
+  }),
 };
 
-export function excelSource(
-  bytes: ArrayBuffer,
-  sheetName = process.env.GOOGLE_SHEETS_TAB || "Passport Skill Records",
-): RegistrySource {
+export function excelSource(bytes: ArrayBuffer): RegistrySource {
   return {
     id: "excel-upload",
     async read() {
       const sheets = await readSheet(bytes);
-      const sheet = sheets.find((s) => s.sheet === sheetName) ?? sheets[0];
-      if (!sheet) throw new UserError("The workbook has no sheets.");
-      return { rows: sheet.data as CellValue[][], firstRow: 1 };
+      if (!sheets.length) throw new UserError("The workbook has no sheets.");
+      return {
+        tabs: sheets.map((s) => ({ name: s.sheet, rows: s.data as CellValue[][], firstRow: 1 })),
+      };
     },
   };
 }
@@ -46,12 +52,7 @@ export function googleSheetsConfig() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
   const key = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, "\n").trim();
   if (!spreadsheetId || !email || !key) return null;
-  return {
-    spreadsheetId,
-    email,
-    key,
-    tab: process.env.GOOGLE_SHEETS_TAB?.trim() || "Passport Skill Records",
-  };
+  return { spreadsheetId, email, key };
 }
 
 let cachedToken: { token: string; expires: number } | undefined;
@@ -98,75 +99,99 @@ const SHEET_STATUS: Record<RowOutcome["status"], string> = {
   failed: "FAILED",
 };
 
+/** Cell updates for the sync columns (Q–T) and Passport ID (G, or the Students tab). */
+export function writeBackCells(workbook: Workbook, result: SyncResult) {
+  const parsed = parseWorkbook(workbook);
+  const stamp = `${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  const cells: { tab: string; row: number; col: number; value: string }[] = [];
+  const at = (tab: string, c: Column) => parsed.columns[tab]?.[c] ?? -1;
+  const put = (tab: string, row: number, c: Column, value: string) => {
+    const col = at(tab, c);
+    if (col >= 0) cells.push({ tab, row, col, value });
+  };
+
+  for (const o of result.outcomes) {
+    if (!o.recordId) continue;
+    // Rows already reported as synced keep their original timestamp.
+    if (o.status === "already_synced" && o.sheetStatus === "SYNCED") continue;
+    const official = o.status === "synced" || o.status === "already_synced";
+    put(o.tab, o.sheetRow, "syncStatus", SHEET_STATUS[o.status]);
+    put(o.tab, o.sheetRow, "syncedVersion", official && o.version ? `V${o.version}` : "");
+    put(o.tab, o.sheetRow, "syncedAt", official ? stamp : "");
+    put(o.tab, o.sheetRow, "syncNote", official ? "" : o.message);
+  }
+  // The permanent Passport ID is written consistently to every row of the student.
+  for (const r of parsed.rows) {
+    const studentId = r.ok ? r.row.studentId : r.studentId;
+    const passportId = result.passportIds[studentId];
+    const current = r.ok ? r.row.passportId : "";
+    if (passportId && current !== passportId)
+      put(r.ok ? r.row.tab : r.tab, r.ok ? r.row.sheetRow : r.sheetRow, "passportId", passportId);
+  }
+  for (const s of parsed.students) {
+    const passportId = result.passportIds[s.studentId];
+    if (passportId && s.student?.passportId !== passportId)
+      put(s.tab, s.sheetRow, "passportId", passportId);
+  }
+  return cells;
+}
+
 export function googleSheetsSource(): RegistrySource {
   const config = googleSheetsConfig();
   if (!config)
     throw new UserError(
       "Google Sheets is not configured (GOOGLE_SHEETS_SPREADSHEET_ID and GOOGLE_SERVICE_ACCOUNT_*).",
     );
-  const base = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(config.spreadsheetId)}/values`;
-  const range = `'${config.tab.replace(/'/g, "''")}'`;
+  const base = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(config.spreadsheetId)}`;
+  const quote = (tab: string) => `'${tab.replace(/'/g, "''")}'`;
 
   return {
     id: "google-sheets",
     async read() {
       const token = await serviceAccountToken(config.email, config.key);
+      const headers = { authorization: `Bearer ${token}` };
+      const meta = await fetch(`${base}?fields=sheets.properties.title`, { headers });
+      if (!meta.ok)
+        throw new UserError(
+          `Could not open the Google Sheet (${meta.status}). Is it shared with ${config.email}?`,
+        );
+      const titles = (
+        (await meta.json()) as { sheets: { properties: { title: string } }[] }
+      ).sheets.map((s) => s.properties.title);
+      const ranges = titles
+        .map((t) => `ranges=${encodeURIComponent(`${quote(t)}!A1:Z5000`)}`)
+        .join("&");
       const response = await fetch(
-        `${base}/${encodeURIComponent(`${range}!A1:Z5000`)}?valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`,
-        {
-          headers: { authorization: `Bearer ${token}` },
-        },
+        `${base}/values:batchGet?${ranges}&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`,
+        { headers },
       );
       if (!response.ok)
-        throw new UserError(
-          `Could not read the Google Sheet (${response.status}). Is it shared with ${config.email}?`,
-        );
-      const json = (await response.json()) as { values?: string[][] };
-      return { rows: json.values ?? [], firstRow: 1 };
+        throw new UserError(`Could not read the Google Sheet (${response.status}).`);
+      const json = (await response.json()) as { valueRanges: { values?: string[][] }[] };
+      return {
+        tabs: titles.map((name, i) => ({
+          name,
+          rows: json.valueRanges[i]?.values ?? [],
+          firstRow: 1,
+        })),
+      };
     },
-    async writeBack(table, outcomes) {
-      const header =
-        table.rows.find((r) => r.some((c) => String(c ?? "").trim() === "Record ID")) ?? [];
-      const col = (c: Column) =>
-        header.findIndex((h) => (COLUMNS[c] as readonly string[]).includes(String(h ?? "").trim()));
-      const at = {
-        passportId: col("passportId"),
-        status: col("syncStatus"),
-        version: col("syncedVersion"),
-        syncedAt: col("syncedAt"),
-        note: col("syncNote"),
-      };
-      const stamp = `${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`;
-      const data: { range: string; values: string[][] }[] = [];
-      const put = (index: number, row: number, value: string) => {
-        if (index >= 0)
-          data.push({ range: `${range}!${columnLetter(index)}${row}`, values: [[value]] });
-      };
-      for (const o of outcomes) {
-        // Leave rows that were already reported as synced untouched (keeps their original timestamp).
-        if (o.status === "already_synced" && o.sheetStatus === "SYNCED") continue;
-        const official = o.status === "synced" || o.status === "already_synced";
-        put(at.status, o.sheetRow, SHEET_STATUS[o.status]);
-        put(at.version, o.sheetRow, official && o.version ? `V${o.version}` : "");
-        put(at.syncedAt, o.sheetRow, official ? stamp : "");
-        put(
-          at.note,
-          o.sheetRow,
-          o.status === "synced" || o.status === "already_synced" ? "" : o.message,
-        );
-        if (o.passportId) put(at.passportId, o.sheetRow, o.passportId);
-      }
+    async writeBack(workbook, result) {
+      const data = writeBackCells(workbook, result).map((c) => ({
+        range: `${quote(c.tab)}!${columnLetter(c.col)}${c.row}`,
+        values: [[c.value]],
+      }));
       if (!data.length) return;
       const token = await serviceAccountToken(config.email, config.key);
       for (let i = 0; i < data.length; i += 500) {
-        const response = await fetch(`${base}:batchUpdate`, {
+        const response = await fetch(`${base}/values:batchUpdate`, {
           method: "POST",
           headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
           body: JSON.stringify({ valueInputOption: "RAW", data: data.slice(i, i + 500) }),
         });
         if (!response.ok)
           throw new UserError(
-            `Could not write sync status back to the sheet (${response.status}).`,
+            `Could not write sync results back to the sheet (${response.status}).`,
           );
       }
     },

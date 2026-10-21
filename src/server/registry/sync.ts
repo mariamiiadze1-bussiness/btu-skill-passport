@@ -12,7 +12,15 @@ import {
   students,
 } from "../schema";
 import { isSelfRegistered, nextPassportId, sameName } from "../students";
-import { parseSheet, rowHash, type RegistryRow, type SheetTable } from "./format";
+import {
+  parseWorkbook,
+  rowHash,
+  type ParsedRow,
+  type RegistryRow,
+  type RegistryStudent,
+  type SheetTable,
+  type Workbook,
+} from "./format";
 import { UserError } from "../errors";
 
 /**
@@ -24,6 +32,7 @@ import { UserError } from "../errors";
  */
 
 export type RowOutcome = {
+  tab: string;
   sheetRow: number;
   recordId: string;
   studentId: string;
@@ -47,6 +56,8 @@ export type SyncResult = {
     versions: number;
   };
   outcomes: RowOutcome[];
+  /** Permanent Passport ID of every student in the sheet, to write back to all their rows. */
+  passportIds: Record<string, string>;
   anchorError: string | null;
 };
 
@@ -56,7 +67,7 @@ export type SyncOptions = {
   now?: Date;
   /** Seed only: import just these rows (e.g. the workbook's already-SYNCED baseline). */
   filter?: (row: RegistryRow) => boolean;
-  /** Seed only: also give every student in the sheet a passport, even with no new awards. */
+  /** Seed only: still register the students of rows the filter leaves out. */
   ensurePassports?: boolean;
 };
 
@@ -64,29 +75,70 @@ class RowError extends Error {}
 
 export async function runSync(
   db: Db,
-  table: SheetTable,
+  input: Workbook | SheetTable,
   options: SyncOptions,
 ): Promise<SyncResult> {
-  const result = await withLock(db, "registry-sync", 600, () => syncLocked(db, table, options));
+  const result = await withLock(db, "registry-sync", 600, () => syncLocked(db, input, options));
   if (!result) throw new UserError("Another sync is already running. Try again in a minute.");
   return result;
 }
 
-async function syncLocked(db: Db, table: SheetTable, options: SyncOptions): Promise<SyncResult> {
+async function syncLocked(
+  db: Db,
+  input: Workbook | SheetTable,
+  options: SyncOptions,
+): Promise<SyncResult> {
   const now = options.now ?? new Date();
-  const parsed = parseSheet(table);
+  let parsed;
+  try {
+    parsed = parseWorkbook(input);
+  } catch (error) {
+    throw new UserError(error instanceof Error ? error.message : String(error));
+  }
   const [run] = await db
     .insert(importRuns)
     .values({ source: options.source, actorUserId: options.actorUserId ?? null, status: "running" })
     .returning();
   const outcomes: RowOutcome[] = [];
+  /** Students whose passport content changed in this run. */
   const affected = new Set<string>();
+  /** Students confirmed by BTU's data in this run (they must have a passport). */
+  const touched = new Set<string>();
   const seen = new Set<string>();
 
   try {
+    // Registries layout: every student in the Students tab gets a passport (spec stage 1–3).
+    for (const entry of parsed.students) {
+      if (!entry.student) {
+        outcomes.push({
+          tab: entry.tab,
+          sheetRow: entry.sheetRow,
+          recordId: "",
+          studentId: entry.studentId,
+          status: "failed",
+          message: entry.errors.join("; "),
+        });
+        continue;
+      }
+      try {
+        touched.add((await resolveStudent(db, entry.student, now)).id);
+      } catch (error) {
+        if (!(error instanceof RowError)) throw error;
+        outcomes.push({
+          tab: entry.tab,
+          sheetRow: entry.sheetRow,
+          recordId: "",
+          studentId: entry.studentId,
+          status: "failed",
+          message: error.message,
+        });
+      }
+    }
+
     for (const entry of parsed.rows) {
       if (!entry.ok) {
         outcomes.push({
+          tab: entry.tab,
           sheetRow: entry.sheetRow,
           recordId: entry.recordId,
           studentId: entry.studentId,
@@ -97,7 +149,10 @@ async function syncLocked(db: Db, table: SheetTable, options: SyncOptions): Prom
       }
       const row = entry.row;
       if (options.filter && !options.filter(row)) {
-        if (options.ensurePassports) await resolveStudent(db, row, now).catch(() => null);
+        if (options.ensurePassports) {
+          const student = await resolveStudent(db, row, now).catch(() => null);
+          if (student) touched.add(student.id);
+        }
         continue;
       }
       if (seen.has(row.recordId)) {
@@ -108,21 +163,24 @@ async function syncLocked(db: Db, table: SheetTable, options: SyncOptions): Prom
       }
       seen.add(row.recordId);
       try {
-        outcomes.push(await processRow(db, row, now, options.source, affected));
+        outcomes.push(await processRow(db, row, now, options.source, affected, touched));
       } catch (error) {
         if (!(error instanceof RowError)) throw error;
         outcomes.push(outcome(row, "failed", error.message));
       }
     }
 
-    if (options.ensurePassports) {
-      const all = await db.select({ id: students.id }).from(students);
+    // A confirmed student without any passport yet gets version 1 (possibly with no skills).
+    if (touched.size) {
       const withVersion = new Set(
-        (await db.selectDistinct({ id: passportVersions.studentId }).from(passportVersions)).map(
-          (r) => r.id,
-        ),
+        (
+          await db
+            .selectDistinct({ id: passportVersions.studentId })
+            .from(passportVersions)
+            .where(inArray(passportVersions.studentId, [...touched]))
+        ).map((r) => r.id),
       );
-      for (const s of all) if (!withVersion.has(s.id)) affected.add(s.id);
+      for (const id of touched) if (!withVersion.has(id)) affected.add(id);
     }
 
     // One new version per affected student, then a single blockchain batch for all of them.
@@ -130,7 +188,16 @@ async function syncLocked(db: Db, table: SheetTable, options: SyncOptions): Prom
     const versionByStudent = new Map(issued.map((v) => [v.studentId, v.version]));
     const anchor = await anchorPending(db);
 
-    const official = await officialVersionSet(db, [...new Set(outcomes.map((o) => o.studentId))]);
+    const studentIds = [
+      ...new Set(
+        [
+          ...outcomes.map((o) => o.studentId),
+          ...parsed.rows.map((r) => (r.ok ? r.row.studentId : r.studentId)),
+          ...parsed.students.map((x) => x.studentId),
+        ].filter(Boolean),
+      ),
+    ];
+    const official = await officialVersionSet(db, studentIds);
     for (const o of outcomes) {
       if (o.status === "synced") o.version = versionByStudent.get(o.studentId);
       if (
@@ -143,6 +210,16 @@ async function syncLocked(db: Db, table: SheetTable, options: SyncOptions): Prom
       }
     }
     await recordOutcomes(db, run!.id, outcomes, parsed.rows);
+    const passportIds = studentIds.length
+      ? Object.fromEntries(
+          (
+            await db
+              .select({ id: students.id, passportId: students.passportId })
+              .from(students)
+              .where(inArray(students.id, studentIds))
+          ).map((s) => [s.id, s.passportId]),
+        )
+      : {};
 
     const totals = {
       rows: outcomes.length,
@@ -163,7 +240,7 @@ async function syncLocked(db: Db, table: SheetTable, options: SyncOptions): Prom
         status: totals.failed ? "failed" : "completed",
       });
     }
-    return { runId: run!.id, totals, outcomes, anchorError: anchor.error };
+    return { runId: run!.id, totals, outcomes, passportIds, anchorError: anchor.error };
   } catch (error) {
     await db
       .update(importRuns)
@@ -183,6 +260,7 @@ const outcome = (
   message: string,
   extra: Partial<RowOutcome> = {},
 ): RowOutcome => ({
+  tab: row.tab,
   sheetRow: row.sheetRow,
   recordId: row.recordId,
   studentId: row.studentId,
@@ -198,6 +276,7 @@ async function processRow(
   now: Date,
   source: string,
   affected: Set<string>,
+  touched: Set<string>,
 ): Promise<RowOutcome> {
   // Only confirmed awards reach the official document (spec: PENDING/REJECTED never do).
   if (row.verificationStatus && row.verificationStatus !== "CONFIRMED") {
@@ -289,6 +368,11 @@ async function processRow(
       affected.add(student.id);
       return outcome(row, "synced", "Added to the passport", { passportId: student.passportId });
     })
+    .then((result) => {
+      // Only after the transaction committed: the student now certainly exists.
+      touched.add(row.studentId);
+      return result;
+    })
     .catch((error: unknown) => {
       if (error instanceof RowError) throw error;
       throw new RowError(
@@ -302,7 +386,7 @@ async function processRow(
  * the first time the registry lists them. Name or Passport ID mismatches stop the row, so a
  * wrong ID can never update someone else's passport.
  */
-async function resolveStudent(db: Db, row: RegistryRow, now: Date) {
+async function resolveStudent(db: Db, row: RegistryStudent, now: Date) {
   const [byId] = await db.select().from(students).where(eq(students.id, row.studentId));
   if (byId) {
     if (!sameName(byId.firstName, row.firstName) || !sameName(byId.lastName, row.lastName)) {
@@ -337,6 +421,7 @@ async function resolveStudent(db: Db, row: RegistryRow, now: Date) {
         program: row.program || byEmail.program,
         educationLevel: row.educationLevel || byEmail.educationLevel,
         status: row.studentStatus,
+        ...(row.firstIssued ? { issuedAt: row.firstIssued } : {}),
       })
       .where(eq(students.id, byEmail.id))
       .returning();
@@ -381,12 +466,7 @@ async function officialVersionSet(db: Db, studentIds: string[]) {
   return new Set(rows.map((r) => `${r.s}:${r.v}`));
 }
 
-async function recordOutcomes(
-  db: Db,
-  runId: number,
-  outcomes: RowOutcome[],
-  rows: ReturnType<typeof parseSheet>["rows"],
-) {
+async function recordOutcomes(db: Db, runId: number, outcomes: RowOutcome[], rows: ParsedRow[]) {
   const hashByRecord = new Map(
     rows.filter((r) => r.ok).map((r) => [r.row.recordId, rowHash(r.row)]),
   );

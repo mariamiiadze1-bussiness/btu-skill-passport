@@ -35,17 +35,21 @@ How the system meets the hackathon brief (_ჰაკათონის დავ
 
 ## §1 Unique passport
 
-- `students.passport_id` is unique and permanent; `students.issued_at` is the fixed first-issue date. Names are validated and fixed at creation.
-- One Student ID ↔ one passport. A student who registers before appearing in the registry gets a temporary `BTU-S-…` ID; the first registry row with their email claims it (foreign keys follow with `ON UPDATE CASCADE`), after checking the name and Passport ID match.
+- `students.passport_id` is unique and permanent; `students.issued_at` is the fixed first-issue date. Name, Passport ID and first-issue date never change after creation.
+- One Student ID ↔ one passport; the Student ID is the key for every update, so one student's data can never reach another passport.
+- Passports are issued from BTU's data (brief stage 1–3): a student listed in the registry gets version 1, with their confirmed skills or none yet.
+- Quick registration (a student signing up with their @btu.edu.ge email) only **reserves** the passport: it shows the Passport ID and name at once, but nothing is signed or anchored until BTU's data confirms the student — the registry lists them (matched by email, then Student ID adopted; name must match) or an administrator adds their first skill.
 
 ## §2 / §4 Google Sheets integration and automatic updates
 
-- **Reading:** a Google service account (JWT → OAuth token, `jose`) reads the tab with the Sheets API v4.
-- **Detecting changes:** an Apps Script `onChange` trigger calls `POST /api/sync/webhook` within seconds; a daily Vercel Cron (`/api/cron/sync`) and the admin "Sync now" button cover missed events. A database lock stops two syncs from running at once.
-- **Validation (§2, workbook "completeness rule"):** required columns A–M and O–P, valid IDs, category ∈ {AI Skill, AI Applied Skill, AI Advanced Skill}, badge code consistent with category, real dates, BTU email domain, and characters the PDF font can print. Invalid rows are reported and never processed.
-- **Matching (§4.3):** by Student ID; if the name or Passport ID doesn't match, the row stops ("a wrong ID never updates another student's passport").
-- **Idempotency (§4.6):** `import_records` is a ledger keyed by Record ID with a hash of the row's verified content. Re-syncing skips processed records; editing an already-issued record is refused; the same Skill ID is never printed twice for one student; only `CONFIRMED` awards are added when a status column exists.
-- **Write-back:** Passport ID (G) and Sync Status / Version / Synced At / Notes (Q–T), as the workbook's technical notes require. A record is written as `SYNCED` only after its version is anchored on the blockchain.
+- **Two registry layouts are read**, both described by BTU: the combined "Passport Skill Records" sheet of the test workbook, and the brief's three registries — **Students**, **Skills Catalog**, **Verified Skills** (joined by Student ID and Skill ID). Columns are matched by header name, not position.
+- **Reading:** a Google service account (JWT → OAuth token, `jose`) reads every tab with the Sheets API v4. The same pipeline accepts an uploaded `.xlsx` (optional feature in the brief).
+- **Detecting changes:** an Apps Script `onChange` trigger calls `POST /api/sync/webhook` within seconds; a daily Vercel Cron (`/api/cron/sync`) and the admin "Sync now" button cover missed events. A database lock stops two syncs running at once.
+- **Validation:** the workbook's completeness rule (A–M and O–Q populated; Passport ID / First Issued may be empty only for a new student, as the system assigns them), valid IDs, category ∈ {AI Skill, AI Applied Skill, AI Advanced Skill}, badge code consistent with the category (column N is derived), real dates, BTU email domain, characters the PDF font can print. In the three-registry layout an award whose Student ID or Skill ID is not in its registry is stopped. Invalid rows are reported and never processed.
+- **Only CONFIRMED awards** reach the passport when a status column exists; PENDING / REJECTED are skipped, and a later change to CONFIRMED is picked up on the next sync. No approval workflow is modeled (workbook note): the registry is the source of verified data.
+- **Matching (§4.3):** by Student ID; a name or Passport ID mismatch stops the row ("a wrong ID never updates another student's passport").
+- **Idempotency (§4.6):** `import_records` is a ledger keyed by Record ID with a hash of the row's verified content. Re-syncing skips processed records; editing an already-issued record is refused; the same Skill ID is never printed twice for one student.
+- **Write-back** (workbook notes): the permanent Passport ID is written to **every** row of the student (or the Students tab), and Sync Status / Version / Synced At / Notes (Q–T) to each record. A record is written as `SYNCED` only after its version is anchored.
 
 ## §3 PDF generation
 

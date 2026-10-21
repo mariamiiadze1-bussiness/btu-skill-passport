@@ -91,6 +91,11 @@ function Dashboard() {
           </div>
         </div>
       )}
+      {!latest && !profile.issuing && (
+        <p role="status" className="mb-4 rounded-xl border-2 border-primary bg-card px-4 py-3 text-sm font-semibold">
+          {t("Your Passport ID is reserved. BTU issues your passport officially once your student record is confirmed in BTU's registry.")}
+        </p>
+      )}
       {profile.issuing && (
         <p role="status" className="mb-4 rounded-xl border-2 border-primary bg-card px-4 py-3 text-sm font-semibold">
           {t("A new version of your passport is being recorded on the blockchain. It will appear here in a moment.")}
@@ -104,8 +109,8 @@ function Dashboard() {
         <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Name" value={`${profile.student.firstName} ${profile.student.lastName}`} />
           <Field label="Passport ID" value={profile.student.passportId} mono />
-          <Field label="Current version" value={latest ? `v${latest.version} · ${formatDate(latest.issuedAt, language)}` : t("Being issued…")} />
-          <Field label="Original issue" value={formatDate(profile.student.originalIssueDate, language)} />
+          <Field label="Current version" value={latest ? `v${latest.version} · ${formatDate(latest.issuedAt, language)}` : t(profile.issuing ? "Being issued…" : "Not issued yet")} />
+          <Field label="Original issue" value={latest ? formatDate(profile.student.originalIssueDate, language) : "—"} />
         </dl>
 
         {latest && (
@@ -188,7 +193,7 @@ function Dashboard() {
             })}
           </div>
         ) : (
-          <p className="panel p-6 text-sm text-muted-foreground">{t("Your passport is ready. Skills appear here as BTU confirms them.")}</p>
+          <p className="panel p-6 text-sm text-muted-foreground">{latest ? t("No verified skills yet. They appear here as BTU confirms them.") : t("Skills appear here once BTU issues your passport.")}</p>
         )}
       </section>
     </AppShell>

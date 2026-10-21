@@ -4,7 +4,6 @@ import { z } from "zod";
 import type { Db } from "./db";
 import { getDummyHash, hashPassword, newSessionToken, sha256, verifyPassword } from "./crypto";
 import { allowedEmailDomain, isAllowedEmail } from "./email-domain";
-import { anchorPending, issueVersions } from "./issuance";
 import { isPrintable } from "./pdf/generate";
 import { clearRateLimit, enforceRateLimit } from "./rate-limit";
 import { sessions, students, users } from "./schema";
@@ -79,9 +78,10 @@ export async function login(db: Db, input: unknown, clientKey: string) {
 }
 
 /**
- * Quick registration. A BTU email already in the registry links to that student's passport;
- * otherwise a new passport is created right away (empty until BTU adds skills) with the
- * name the student entered, which is then fixed on the passport.
+ * Quick registration. A BTU email already in the registry links to that student's passport.
+ * Otherwise the student's passport is reserved (permanent Passport ID, name) and shown at once,
+ * but BTU only issues it officially — signed and anchored — once BTU's own data confirms the
+ * student (the registry lists them, or an administrator adds their first skill).
  */
 async function studentForEmail(
   db: Db,
@@ -103,9 +103,6 @@ async function studentForEmail(
       issuedAt: new Date().toISOString().slice(0, 10),
     })
     .returning();
-  await issueVersions(db, [created!.id]);
-  // Submit to the blockchain without waiting; the dashboard finishes it on the next visit.
-  await anchorPending(db, { waitMs: 0 }).catch(() => null);
   return created!.id;
 }
 

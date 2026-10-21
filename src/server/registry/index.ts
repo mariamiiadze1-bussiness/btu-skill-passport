@@ -2,7 +2,7 @@ import type { Db } from "../db";
 import { googleSheetsConfig, googleSheetsSource, type RegistrySource } from "./sources";
 import { runSync, type SyncResult } from "./sync";
 
-export { excelSource, googleSheetsConfig, testWorkbookSource } from "./sources";
+export { excelSource, googleSheetsConfig, testWorkbookSource, writeBackCells } from "./sources";
 export type { RegistrySource } from "./sources";
 export type { RowOutcome, SyncResult } from "./sync";
 
@@ -19,12 +19,12 @@ export async function syncFromSource(
   source: RegistrySource,
   actorUserId?: string | null,
 ): Promise<SyncResult & { writeBackError: string | null }> {
-  const table = await source.read();
-  const result = await runSync(db, table, { source: source.id, actorUserId });
+  const workbook = await source.read();
+  const result = await runSync(db, workbook, { source: source.id, actorUserId });
   let writeBackError: string | null = null;
   if (source.writeBack) {
     try {
-      await source.writeBack(table, result.outcomes);
+      await source.writeBack(workbook, result);
     } catch (error) {
       writeBackError = error instanceof Error ? error.message : String(error);
     }

@@ -8,14 +8,16 @@ This project was built with [Lovable](https://lovable.dev). Continue in the [Lov
 
 ## How the site works
 
-| Page | Who | What happens |
-|---|---|---|
-| `/auth` | Students, admins | Sign in with a **@btu.edu.ge** account (password or **Continue with Google**). **Quick registration** (name + BTU email) creates the student's passport at once, empty until BTU adds skills. Admin accounts can't be self-registered. |
-| `/` | Signed-in student | Their own passport: Passport ID, current version, **verification code** (copy / verify / add to LinkedIn), skill stamps, and version history showing what each version added. |
-| `/passport/:version` | Signed-in student | The official multi-page PDF, rebuilt on the server and served only if it matches the anchored hash. |
-| `/verify` | Anyone, no account | Enter the code or scan the QR → four checks: official record, issuer (BTU signature + DID), blockchain anchor (Etherscan link), and optionally the **PDF file itself** (hashed in the browser). Shows current vs superseded. |
-| `/admin` | Admins only | **Sync from Google Sheets** or **import the Excel workbook**, see failed/skipped rows with reasons, add a skill by hand, review PENDING awards, watch the blockchain queue and batches. |
-| `/.well-known/did.json` | Public | BTU's issuer identity (W3C did:web) with the address that signs passports. |
+| Page                    | Who                | What happens                                                                                                                                                                                                                                                              |
+| ----------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/auth`                 | Students, admins   | Sign in with a **@btu.edu.ge** account (password or **Continue with Google**). **Quick registration** (name + BTU email) reserves the student's Passport ID at once; BTU issues the passport once its data confirms the student. Admin accounts can't be self-registered. |
+| `/`                     | Signed-in student  | Their own passport: Passport ID, current version, **verification code** (copy / verify / add to LinkedIn), skill stamps, and version history showing what each version added.                                                                                             |
+| `/passport/:version`    | Signed-in student  | The official multi-page PDF, rebuilt on the server and served only if it matches the anchored hash.                                                                                                                                                                       |
+| `/verify`               | Anyone, no account | Enter the code or scan the QR → four checks: official record, issuer (BTU signature + DID), blockchain anchor (Etherscan link), and optionally the **PDF file itself** (hashed in the browser). Shows current vs superseded.                                              |
+| `/admin`                | Admins only        | **Sync from Google Sheets** or **import the Excel workbook**, see failed/skipped rows with reasons, add a skill by hand, watch the blockchain queue and batches.                                                                                                          |
+| `/.well-known/did.json` | Public             | BTU's issuer identity (W3C did:web) with the address that signs passports.                                                                                                                                                                                                |
+
+**Registry layouts:** the combined "Passport Skill Records" sheet (test workbook) or the brief's three tabs — Students, Skills Catalog, Verified Skills.
 
 **Lifecycle:** BTU adds a CONFIRMED record to the sheet → sync validates it and matches the student by Student ID → one new version per student (PDF → SHA-256 → BTU signature) → one Merkle root per sync goes on Sepolia → the version becomes current → status is written back to the sheet.
 
@@ -81,7 +83,11 @@ npm run db:generate   # after editing src/server/schema.ts, create a new migrati
 const URL = "https://<your-domain>/api/sync/webhook";
 const SECRET = "<SYNC_WEBHOOK_SECRET>";
 function onSheetChange() {
-  UrlFetchApp.fetch(URL, { method: "post", headers: { Authorization: "Bearer " + SECRET }, muteHttpExceptions: true });
+  UrlFetchApp.fetch(URL, {
+    method: "post",
+    headers: { Authorization: "Bearer " + SECRET },
+    muteHttpExceptions: true,
+  });
 }
 ```
 
