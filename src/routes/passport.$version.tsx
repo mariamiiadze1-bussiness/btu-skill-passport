@@ -4,7 +4,7 @@ import { Asterisks, BrandTag, Stamp } from "@/components/passport/Stamp";
 import { formatDate, latestVersion, skills, student, TYPE_LABEL, versions } from "@/lib/passport-data";
 
 export const Route = createFileRoute("/passport/$version")({
-  validateSearch: (s: Record<string, unknown>) => ({ print: s.print === true || s.print === "true" ? true : undefined }),
+  validateSearch: (s: Record<string, unknown>) => ({ print: s["print"] === true || s["print"] === "true" ? true : undefined }),
   loader: ({ params }) => {
     const v = versions.find((x) => String(x.version) === params.version);
     if (!v) throw notFound();

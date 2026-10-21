@@ -5,7 +5,7 @@ import { Asterisks } from "@/components/passport/Stamp";
 import { formatDate, verifyCode } from "@/lib/passport-data";
 
 export const Route = createFileRoute("/verify")({
-  validateSearch: (s: Record<string, unknown>) => ({ code: typeof s.code === "string" ? s.code : undefined }),
+  validateSearch: (s: Record<string, unknown>) => ({ code: typeof s["code"] === "string" ? s["code"] : undefined }),
   head: () => ({
     meta: [
       { title: "Verify an AI Skills Passport — BTU" },

@@ -21,8 +21,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           <nav className="flex gap-1">
             {nav.map((n) => (
               <Link key={n.to} to={n.to} activeOptions={{ exact: true }}
-                className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground hover:text-foreground"
-                activeProps={{ className: "bg-foreground text-background hover:text-background" }}>
+                className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide"
+                inactiveProps={{ className: "text-muted-foreground hover:text-foreground" }}
+                activeProps={{ className: "bg-foreground text-background" }}>
                 {n.label}
               </Link>
             ))}

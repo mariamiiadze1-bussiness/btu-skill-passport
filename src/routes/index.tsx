@@ -34,7 +34,7 @@ function Dashboard() {
           <Field label="Original issue" value={formatDate(student.originalIssueDate)} />
         </dl>
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <Link to="/passport/$version" params={{ version: String(latestVersion.version) }}
+          <Link to="/passport/$version" params={{ version: String(latestVersion.version) }} search={{}}
             className="rounded-full bg-foreground px-5 py-2.5 text-sm font-bold uppercase text-background hover:opacity-90">
             View passport PDF
           </Link>
@@ -60,7 +60,7 @@ function Dashboard() {
                     ? <span className="rounded-sm bg-success px-2 py-0.5 text-[11px] font-bold uppercase text-destructive-foreground">Latest · Active</span>
                     : <span className="rounded-sm bg-muted px-2 py-0.5 text-[11px] font-bold uppercase text-muted-foreground">Superseded</span>}
                 </div>
-                <Link to="/passport/$version" params={{ version: String(v.version) }} className="text-sm font-bold uppercase underline underline-offset-4">Open</Link>
+                <Link to="/passport/$version" params={{ version: String(v.version) }} search={{}} className="text-sm font-bold uppercase underline underline-offset-4">Open</Link>
               </li>
             ))}
           </ul>

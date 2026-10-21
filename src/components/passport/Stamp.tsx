@@ -5,7 +5,7 @@ export function Stamp({ type, size = "md" }: { type: SkillType; size?: "sm" | "m
   const s = size === "sm";
   if (type === "AI_SKILL")
     return (
-      <div aria-label="AI Skill stamp" className={cn("stamp-tri grid shrink-0 place-items-end bg-stamp-red pb-1.5 text-center font-display uppercase leading-none text-destructive-foreground", s ? "h-10 w-11 text-[6px]" : "h-16 w-[72px] text-[8px]")}>
+      <div aria-label="AI Skill stamp" className={cn("stamp-tri flex shrink-0 items-end justify-center bg-stamp-red pb-1.5 text-center font-display uppercase leading-none text-destructive-foreground", s ? "h-10 w-11 text-[6px]" : "h-16 w-[72px] text-[8px]")}>
         <span>AI<br />Skill</span>
       </div>
     );
