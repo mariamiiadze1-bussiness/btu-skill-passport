@@ -13,7 +13,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as VerifyRouteImport } from './routes/verify'
+import { Route as DotwellKnownDidDotjsonRouteImport } from './routes/[.]well-known.did[.]json'
 import { Route as PassportVersionRouteImport } from './routes/passport.$version'
+import { Route as ApiCronSyncRouteImport } from './routes/api.cron.sync'
+import { Route as ApiSyncWebhookRouteImport } from './routes/api.sync.webhook'
+import { Route as ApiAuthGoogleCallbackRouteImport } from './routes/api.auth.google.callback'
+import { Route as ApiAuthGoogleStartRouteImport } from './routes/api.auth.google.start'
+import { Route as ApiPassportVersionPdfRouteImport } from './routes/api.passport.$version.pdf'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -35,9 +41,39 @@ const VerifyRoute = VerifyRouteImport.update({
   path: '/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DotwellKnownDidDotjsonRoute = DotwellKnownDidDotjsonRouteImport.update({
+  id: '/.well-known/did.json',
+  path: '/.well-known/did.json',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PassportVersionRoute = PassportVersionRouteImport.update({
   id: '/passport/$version',
   path: '/passport/$version',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCronSyncRoute = ApiCronSyncRouteImport.update({
+  id: '/api/cron/sync',
+  path: '/api/cron/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSyncWebhookRoute = ApiSyncWebhookRouteImport.update({
+  id: '/api/sync/webhook',
+  path: '/api/sync/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthGoogleCallbackRoute = ApiAuthGoogleCallbackRouteImport.update({
+  id: '/api/auth/google/callback',
+  path: '/api/auth/google/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthGoogleStartRoute = ApiAuthGoogleStartRouteImport.update({
+  id: '/api/auth/google/start',
+  path: '/api/auth/google/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPassportVersionPdfRoute = ApiPassportVersionPdfRouteImport.update({
+  id: '/api/passport/$version/pdf',
+  path: '/api/passport/$version/pdf',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -46,14 +82,26 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/verify': typeof VerifyRoute
+  '/.well-known/did.json': typeof DotwellKnownDidDotjsonRoute
   '/passport/$version': typeof PassportVersionRoute
+  '/api/cron/sync': typeof ApiCronSyncRoute
+  '/api/sync/webhook': typeof ApiSyncWebhookRoute
+  '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
+  '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
+  '/api/passport/$version/pdf': typeof ApiPassportVersionPdfRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/verify': typeof VerifyRoute
+  '/.well-known/did.json': typeof DotwellKnownDidDotjsonRoute
   '/passport/$version': typeof PassportVersionRoute
+  '/api/cron/sync': typeof ApiCronSyncRoute
+  '/api/sync/webhook': typeof ApiSyncWebhookRoute
+  '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
+  '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
+  '/api/passport/$version/pdf': typeof ApiPassportVersionPdfRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -61,14 +109,54 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/verify': typeof VerifyRoute
+  '/.well-known/did.json': typeof DotwellKnownDidDotjsonRoute
   '/passport/$version': typeof PassportVersionRoute
+  '/api/cron/sync': typeof ApiCronSyncRoute
+  '/api/sync/webhook': typeof ApiSyncWebhookRoute
+  '/api/auth/google/callback': typeof ApiAuthGoogleCallbackRoute
+  '/api/auth/google/start': typeof ApiAuthGoogleStartRoute
+  '/api/passport/$version/pdf': typeof ApiPassportVersionPdfRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/auth' | '/verify' | '/passport/$version'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/auth'
+    | '/verify'
+    | '/.well-known/did.json'
+    | '/passport/$version'
+    | '/api/cron/sync'
+    | '/api/sync/webhook'
+    | '/api/auth/google/callback'
+    | '/api/auth/google/start'
+    | '/api/passport/$version/pdf'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/auth' | '/verify' | '/passport/$version'
-  id: '__root__' | '/' | '/admin' | '/auth' | '/verify' | '/passport/$version'
+  to:
+    | '/'
+    | '/admin'
+    | '/auth'
+    | '/verify'
+    | '/.well-known/did.json'
+    | '/passport/$version'
+    | '/api/cron/sync'
+    | '/api/sync/webhook'
+    | '/api/auth/google/callback'
+    | '/api/auth/google/start'
+    | '/api/passport/$version/pdf'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/auth'
+    | '/verify'
+    | '/.well-known/did.json'
+    | '/passport/$version'
+    | '/api/cron/sync'
+    | '/api/sync/webhook'
+    | '/api/auth/google/callback'
+    | '/api/auth/google/start'
+    | '/api/passport/$version/pdf'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,7 +164,13 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
   VerifyRoute: typeof VerifyRoute
+  DotwellKnownDidDotjsonRoute: typeof DotwellKnownDidDotjsonRoute
   PassportVersionRoute: typeof PassportVersionRoute
+  ApiCronSyncRoute: typeof ApiCronSyncRoute
+  ApiSyncWebhookRoute: typeof ApiSyncWebhookRoute
+  ApiAuthGoogleCallbackRoute: typeof ApiAuthGoogleCallbackRoute
+  ApiAuthGoogleStartRoute: typeof ApiAuthGoogleStartRoute
+  ApiPassportVersionPdfRoute: typeof ApiPassportVersionPdfRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -109,11 +203,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/.well-known/did.json': {
+      id: '/.well-known/did.json'
+      path: '/.well-known/did.json'
+      fullPath: '/.well-known/did.json'
+      preLoaderRoute: typeof DotwellKnownDidDotjsonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/passport/$version': {
       id: '/passport/$version'
       path: '/passport/$version'
       fullPath: '/passport/$version'
       preLoaderRoute: typeof PassportVersionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/cron/sync': {
+      id: '/api/cron/sync'
+      path: '/api/cron/sync'
+      fullPath: '/api/cron/sync'
+      preLoaderRoute: typeof ApiCronSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sync/webhook': {
+      id: '/api/sync/webhook'
+      path: '/api/sync/webhook'
+      fullPath: '/api/sync/webhook'
+      preLoaderRoute: typeof ApiSyncWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/google/callback': {
+      id: '/api/auth/google/callback'
+      path: '/api/auth/google/callback'
+      fullPath: '/api/auth/google/callback'
+      preLoaderRoute: typeof ApiAuthGoogleCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/google/start': {
+      id: '/api/auth/google/start'
+      path: '/api/auth/google/start'
+      fullPath: '/api/auth/google/start'
+      preLoaderRoute: typeof ApiAuthGoogleStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/passport/$version/pdf': {
+      id: '/api/passport/$version/pdf'
+      path: '/api/passport/$version/pdf'
+      fullPath: '/api/passport/$version/pdf'
+      preLoaderRoute: typeof ApiPassportVersionPdfRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -124,7 +260,13 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
   VerifyRoute: VerifyRoute,
+  DotwellKnownDidDotjsonRoute: DotwellKnownDidDotjsonRoute,
   PassportVersionRoute: PassportVersionRoute,
+  ApiCronSyncRoute: ApiCronSyncRoute,
+  ApiSyncWebhookRoute: ApiSyncWebhookRoute,
+  ApiAuthGoogleCallbackRoute: ApiAuthGoogleCallbackRoute,
+  ApiAuthGoogleStartRoute: ApiAuthGoogleStartRoute,
+  ApiPassportVersionPdfRoute: ApiPassportVersionPdfRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

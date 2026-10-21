@@ -1,7 +1,8 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { signOut } from "@/lib/api";
 import { LanguageToggle, useI18n } from "@/lib/i18n";
-import { clearPassportSession, usePassportSession } from "@/lib/passport-session";
+import { useSession } from "@/lib/passport-session";
 
 const nav = [
   { to: "/", label: "My Passport" },
@@ -11,7 +12,14 @@ const nav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useI18n();
-  const { ready, registered } = usePassportSession();
+  const session = useSession();
+  const router = useRouter();
+  const links = nav.filter((n) => n.to !== "/admin" || session?.role === "admin");
+  async function handleSignOut() {
+    await signOut();
+    await router.invalidate();
+    await router.navigate({ to: "/auth" });
+  }
   return (
     <div className="min-h-screen bg-background">
       <header className="no-print border-b bg-card">
@@ -24,7 +32,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <div className="flex flex-wrap items-center justify-end gap-2">
           <nav className="flex gap-1">
-            {nav.map((n) => (
+            {links.map((n) => (
               <Link key={n.to} to={n.to} activeOptions={{ exact: true }}
                 className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide"
                 inactiveProps={{ className: "text-muted-foreground hover:text-foreground" }}
@@ -32,8 +40,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {t(n.label)}
               </Link>
             ))}
-            {ready && registered ? (
-              <button type="button" onClick={() => { clearPassportSession(); window.location.assign("/"); }} className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground hover:text-foreground">{t("Log out")}</button>
+            {session ? (
+              <button type="button" onClick={() => void handleSignOut()} className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground hover:text-foreground">{t("Log out")}</button>
             ) : (
               <Link to="/auth" activeOptions={{ exact: true }} className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground hover:text-foreground">{t("Sign in")}</Link>
             )}

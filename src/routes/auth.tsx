@@ -1,8 +1,8 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { Asterisks } from "@/components/passport/Stamp";
+import { getAuthOptions, signIn, signUp } from "@/lib/api";
 import { LanguageToggle, useI18n } from "@/lib/i18n";
-import { enterGuestMode, savePassportSession } from "@/lib/passport-session";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -11,35 +11,67 @@ export const Route = createFileRoute("/auth")({
       { name: "description", content: "Sign in or register for your BTU AI Skills Digital Passport." },
     ],
   }),
+  validateSearch: (s: Record<string, unknown>): { error?: string } =>
+    typeof s["error"] === "string" ? { error: s["error"].slice(0, 32) } : {},
+  loader: () => getAuthOptions(),
+  beforeLoad: ({ context }) => {
+    if (context.session) throw redirect({ to: context.session.role === "admin" ? "/admin" : "/" });
+  },
   component: AuthorizationPage,
 });
 
 type Mode = "signin" | "register";
 
+/** Fixed messages for errors from the Google callback; the query value is never shown as-is. */
+const GOOGLE_ERRORS: Record<string, string> = {
+  domain: "Use your BTU Google account to sign in.",
+  no_account: "No BTU passport is registered for this Google account.",
+  unverified: "Your Google email address is not verified.",
+  linked: "This account is linked to a different Google account.",
+  cancelled: "Google sign-in was cancelled.",
+  not_configured: "Google sign-in is not connected yet. Use your BTU email and password for now.",
+  rate: "Too many attempts. Please wait a few minutes and try again.",
+};
+
 function AuthorizationPage() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { t } = useI18n();
   const [mode, setMode] = useState<Mode>("signin");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const { googleEnabled, emailDomain } = Route.useLoaderData();
+  const { error } = Route.useSearch();
+  const [message, setMessage] = useState(error ? (GOOGLE_ERRORS[error] ?? "Google sign-in failed. Please try again.") : "");
+  const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
-    if (mode === "register" && password.length < 8) {
-      setMessage("Use a password with at least 8 characters.");
+    const host = email.trim().toLowerCase().split("@")[1] ?? "";
+    if (host !== emailDomain && !host.endsWith(`.${emailDomain}`)) {
+      setMessage(`Use your @${emailDomain} university email.`);
       return;
     }
-    savePassportSession(email);
-    sessionStorage.removeItem("btu-passport-mode");
-    setMessage(mode === "register" ? "Account created for this demo. Opening your passport…" : "Signed in for this demo. Opening your passport…");
-    window.setTimeout(() => navigate({ to: "/" }), 650);
-  }
-
-  function handleGoogleSignIn() {
-    setMessage("Google sign-in needs OAuth credentials to be connected for this project.");
+    if (mode === "register" && password.length < 10) {
+      setMessage("Use a password with at least 10 characters.");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (mode === "register") await signUp({ data: { email, password, firstName, lastName } });
+      else await signIn({ data: { email, password } });
+      setPassword("");
+      await router.invalidate();
+      const session = router.state.matches[0]?.context.session;
+      await router.navigate({ to: session?.role === "admin" ? "/admin" : "/" });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Something went wrong. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -74,7 +106,7 @@ function AuthorizationPage() {
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">{t("Student access")}</p>
             <h2 className="mt-2 text-3xl sm:text-4xl">{mode === "signin" ? t("Welcome back") : t("Create account")}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              {mode === "signin" ? t("Sign in to view your BTU AI Skills Passport.") : t("Register to start building your verified skills passport.")}
+              {mode === "signin" ? t("Sign in to view your BTU AI Skills Passport.") : t("Create your passport with your BTU email. BTU adds your skills as they are confirmed.")}
             </p>
 
             <div className="mt-7 grid grid-cols-2 rounded-full bg-muted p-1" role="tablist" aria-label={t("Account access")}>
@@ -90,38 +122,48 @@ function AuthorizationPage() {
 
             <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
               {mode === "register" && (
-                <label className="block text-sm font-semibold" htmlFor="auth-name">
-                  {t("Full name")}
-                  <input id="auth-name" autoComplete="name" required value={name} onChange={(e) => setName(e.target.value)}
-                    className="mt-1.5 w-full rounded-xl border bg-background px-4 py-3 font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder={t("Your full name")} />
-                </label>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm font-semibold" htmlFor="auth-first">
+                    {t("First name")}
+                    <input id="auth-first" autoComplete="given-name" required maxLength={60} value={firstName} onChange={(e) => setFirstName(e.target.value)}
+                      className="mt-1.5 w-full rounded-xl border bg-background px-4 py-3 font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                  </label>
+                  <label className="block text-sm font-semibold" htmlFor="auth-last">
+                    {t("Last name")}
+                    <input id="auth-last" autoComplete="family-name" required maxLength={60} value={lastName} onChange={(e) => setLastName(e.target.value)}
+                      className="mt-1.5 w-full rounded-xl border bg-background px-4 py-3 font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                  </label>
+                  <p className="text-xs text-muted-foreground sm:col-span-2">{t("In Latin letters, exactly as on your university record. Your name is printed on the passport and cannot be changed later.")}</p>
+                </div>
               )}
               <label className="block text-sm font-semibold" htmlFor="auth-email">
-                {t("University or personal email")}
+                {t("BTU email")}
                 <input id="auth-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1.5 w-full rounded-xl border bg-background px-4 py-3 font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder={t("you@example.com")} />
+                  className="mt-1.5 w-full rounded-xl border bg-background px-4 py-3 font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder={`name@${emailDomain}`} />
               </label>
               <label className="block text-sm font-semibold" htmlFor="auth-password">
                 {t("Password")}
-                <input id="auth-password" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} minLength={mode === "register" ? 8 : undefined} required value={password} onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1.5 w-full rounded-xl border bg-background px-4 py-3 font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder={mode === "register" ? t("At least 8 characters") : t("Enter your password")} />
+                <span className="relative mt-1.5 block">
+                  <input id="auth-password" type={showPassword ? "text" : "password"} autoComplete={mode === "signin" ? "current-password" : "new-password"} minLength={mode === "register" ? 10 : undefined} required value={password} onChange={(e) => setPassword(e.target.value)}
+                    className="w-full rounded-xl border bg-background px-4 py-3 pr-20 font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder={mode === "register" ? t("At least 10 characters") : t("Enter your password")} />
+                  <button type="button" onClick={() => setShowPassword((v) => !v)} aria-pressed={showPassword} aria-controls="auth-password"
+                    className="absolute inset-y-0 right-3 my-auto h-8 rounded-full px-2 text-xs font-bold uppercase text-muted-foreground hover:text-foreground">
+                    {showPassword ? t("Hide") : t("Show")}
+                  </button>
+                </span>
               </label>
-              <button type="submit" className="flex w-full items-center justify-center rounded-full bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground transition hover:brightness-95">
-                {mode === "signin" ? t("Sign in") : t("Create account")}
+              <button type="submit" disabled={busy} className="flex w-full items-center justify-center rounded-full bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground transition hover:brightness-95 disabled:opacity-60">
+                {busy ? t("Please wait…") : mode === "signin" ? t("Sign in") : t("Create account")}
               </button>
             </form>
 
             <div className="my-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground"><span className="h-px flex-1 bg-border" /> {t("or continue with")} <span className="h-px flex-1 bg-border" /></div>
+            <a href="/api/auth/google/start" className="flex w-full items-center justify-center gap-3 rounded-full border-2 border-foreground/15 px-5 py-3 text-sm font-bold transition hover:border-foreground/40 hover:bg-muted">
+                  <GoogleMark /> {t("Continue with Google")}
+                </a>
+            {!googleEnabled && <p className="mt-2 text-center text-[11px] text-muted-foreground">{t("Google sign-in becomes available once BTU connects its Google Workspace.")}</p>}
 
-            <button type="button" onClick={handleGoogleSignIn} className="flex w-full items-center justify-center gap-3 rounded-full border-2 border-foreground/15 px-5 py-3 text-sm font-bold transition hover:border-foreground/40 hover:bg-muted">
-              <GoogleMark /> {t("Continue with Google")}
-            </button>
-
-            <button type="button" onClick={() => { enterGuestMode(); navigate({ to: "/" }); }} className="mt-3 flex w-full items-center justify-center rounded-full px-5 py-3 text-sm font-bold text-muted-foreground transition hover:bg-muted hover:text-foreground">
-              {t("Continue as guest")} <span className="ml-2" aria-hidden="true">→</span>
-            </button>
-
-            <p aria-live="polite" className={`mt-3 min-h-5 text-center text-xs ${message.startsWith("Google") || message.startsWith("Use") ? "text-destructive" : "text-muted-foreground"}`}>
+            <p aria-live="polite" role={message ? "alert" : undefined} className="mt-3 min-h-5 text-center text-xs font-semibold text-destructive">
               {t(message)}
             </p>
             <p className="mt-2 text-center text-[11px] leading-5 text-muted-foreground">{t("By continuing, you agree to use the passport service in line with BTU policies.")}</p>
