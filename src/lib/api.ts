@@ -3,8 +3,10 @@ import { deleteCookie, getCookie, getRequestIP, setCookie } from "@tanstack/reac
 
 import {
   addSkill,
+  approveStudent,
   getAdminOverview,
   importExcel,
+  rejectStudent,
   retryAnchoring,
   syncRegistry,
 } from "@/server/admin";
@@ -93,9 +95,7 @@ export const signIn = createServerFn({ method: "POST" })
 
 export const requestSignUpCode = createServerFn({ method: "POST" })
   .validator(asObject)
-  .handler(({ data }) =>
-    guarded(async () => startRegistration(await getDb(), data, clientKey())),
-  );
+  .handler(({ data }) => guarded(async () => startRegistration(await getDb(), data, clientKey())));
 
 export const signUp = createServerFn({ method: "POST" })
   .validator(asObject)
@@ -172,6 +172,18 @@ export const uploadRegistryExcel = createServerFn({ method: "POST" })
       const file = data.get("file");
       return importExcel(await getDb(), await currentUser(), file instanceof File ? file : null);
     }),
+  );
+
+export const approveSignUp = createServerFn({ method: "POST" })
+  .validator(asObject)
+  .handler(({ data }) =>
+    guarded(async () => approveStudent(await getDb(), await currentUser(), data["studentId"])),
+  );
+
+export const rejectSignUp = createServerFn({ method: "POST" })
+  .validator(asObject)
+  .handler(({ data }) =>
+    guarded(async () => rejectStudent(await getDb(), await currentUser(), data["studentId"])),
   );
 
 export const addStudentSkill = createServerFn({ method: "POST" })

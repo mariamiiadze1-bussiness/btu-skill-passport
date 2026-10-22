@@ -5,6 +5,7 @@ import type { Db } from "../db/client";
 import { OFFICIAL, orderedSkills, pdfInput } from "./issuance";
 import { generatePassportPdf } from "../pdf/generate";
 import { passportVersions, students } from "../db/schema";
+import { PENDING_APPROVAL } from "./students";
 
 export type PassportView = Awaited<ReturnType<typeof getPassportForStudent>>;
 
@@ -30,6 +31,7 @@ export async function getPassportForStudent(db: Db, studentId: string) {
       lastName: student.lastName,
       program: student.program,
       passportId: student.passportId,
+      pendingApproval: student.status === PENDING_APPROVAL,
       originalIssueDate: student.issuedAt,
     },
     /** A version is still being recorded on the blockchain. */

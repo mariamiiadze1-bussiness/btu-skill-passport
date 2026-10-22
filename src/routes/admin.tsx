@@ -6,6 +6,8 @@ import {
   getAdminData,
   retryBlockchain,
   syncNow,
+  approveSignUp,
+  rejectSignUp,
   uploadRegistryExcel,
 } from "@/lib/api";
 import { formatDate, type ActivityStatus } from "@/lib/passport-data";
@@ -113,6 +115,10 @@ function Admin() {
       </div>
 
       <RegistryPanel data={data} busy={busy} onSync={() => run("sync", () => syncNow(), syncSummary)} onUpload={(form) => run("upload", () => uploadRegistryExcel({ data: form }), syncSummary)} />
+
+      <ApprovalPanel data={data} busy={busy}
+        onApprove={(studentId) => run(`approve:${studentId}`, () => approveSignUp({ data: { studentId } }), () => "Student approved. You can now add their skills below.")}
+        onReject={(studentId) => run(`reject:${studentId}`, () => rejectSignUp({ data: { studentId } }), () => "Sign-up removed.")} />
 
       <AddSkillPanel data={data} busy={busy} onSubmit={(values) => run("add", () => addStudentSkill({ data: values }), (r: { version: number | null }) => `Skill added. Passport v${r.version} issued.`)} />
 
@@ -240,6 +246,36 @@ function RegistryPanel({ data, busy, onSync, onUpload }: { data: Data; busy: str
   );
 }
 
+/** Students who signed up themselves (Google or email) wait here until BTU confirms them. */
+function ApprovalPanel({ data, busy, onApprove, onReject }: { data: Data; busy: string | undefined; onApprove: (id: string) => void; onReject: (id: string) => void }) {
+  const { t } = useI18n();
+  const pending = data.students.filter((s) => s.pending);
+  return (
+    <section className={panel}>
+      <h2 className="text-xl">{t("Waiting for approval")} {pending.length > 0 && <span className="ml-1 rounded-full bg-primary px-2 py-0.5 align-middle text-xs text-primary-foreground">{pending.length}</span>}</h2>
+      <p className="text-sm text-muted-foreground">{t("BTU accounts that signed up themselves. Approve real BTU students, then add their skills below; remove anyone else.")}</p>
+      {pending.length ? (
+        <ul className="mt-4 divide-y">
+          {pending.map((s) => (
+            <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div>
+                <p className="font-bold">{s.name}</p>
+                <p className="text-xs text-muted-foreground">{s.email} · {s.passportId} · {t("signed up")} {dateTime(s.signedUpAt)}</p>
+              </div>
+              <div className="flex gap-2">
+                <button disabled={!!busy} onClick={() => onApprove(s.id)} className={`${button} bg-foreground text-background`}>{busy === `approve:${s.id}` ? t("Approving…") : t("Approve")}</button>
+                <button disabled={!!busy} onClick={() => onReject(s.id)} className={`${button} border-2 border-foreground`}>{t("Remove")}</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 text-sm text-muted-foreground">{t("Nobody is waiting.")}</p>
+      )}
+    </section>
+  );
+}
+
 function AddSkillPanel({ data, busy, onSubmit }: { data: Data; busy: string | undefined; onSubmit: (values: Record<string, string>) => void }) {
   const { t } = useI18n();
   const [catalogSkillId, setCatalogSkillId] = useState("");
@@ -265,7 +301,7 @@ function AddSkillPanel({ data, busy, onSubmit }: { data: Data; busy: string | un
           {t("Student")}
           <select name="studentId" required className={field} defaultValue="">
             <option value="" disabled>{t("Choose a student…")}</option>
-            {data.students.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.passportId}{s.version ? ` · v${s.version}` : ""}</option>)}
+            {data.students.filter((s) => !s.pending).map((s) => <option key={s.id} value={s.id}>{s.name} · {s.passportId}{s.version ? ` · v${s.version}` : ""}</option>)}
           </select>
         </label>
         <label className="text-sm font-semibold">

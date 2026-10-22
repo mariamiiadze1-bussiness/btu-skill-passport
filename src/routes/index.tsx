@@ -93,7 +93,9 @@ function Dashboard() {
       )}
       {!latest && !profile.issuing && (
         <p role="status" className="mb-4 rounded-xl border-2 border-primary bg-card px-4 py-3 text-sm font-semibold">
-          {t("Your Passport ID is reserved. BTU issues your passport officially once your student record is confirmed in BTU's registry.")}
+          {profile.student.pendingApproval
+            ? t("Your account is waiting for BTU's approval. Once BTU confirms you, your verified skills are added to this passport.")
+            : t("Your Passport ID is reserved. BTU issues your passport officially once your student record is confirmed in BTU's registry.")}
         </p>
       )}
       {profile.issuing && (

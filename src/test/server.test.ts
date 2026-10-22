@@ -8,7 +8,14 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { addSkill, ForbiddenError, getAdminOverview, importExcel } from "@/server/admin";
+import {
+  addSkill,
+  approveStudent,
+  ForbiddenError,
+  getAdminOverview,
+  importExcel,
+  rejectStudent,
+} from "@/server/admin";
 import { setAnchorProvider, type AnchorProvider } from "@/server/blockchain/anchoring";
 import {
   AuthError,
@@ -602,6 +609,41 @@ describe("sign in and registration (spec §9)", () => {
     ).toHaveLength(0);
   });
 
+  it("holds a self sign-up for approval: no skills until an administrator approves", async () => {
+    const token = await signUp(
+      db,
+      { email: "wait@btu.edu.ge", password: "long-enough-pw", firstName: "Ana", lastName: "Wait" },
+      "r",
+    );
+    const studentId = (await getSessionUser(db, token))!.studentId!;
+    expect((await passport(studentId)).student).toMatchObject({ pendingApproval: true });
+    const admin = (await sessionFor(ADMIN))!;
+    const pending = (await getAdminOverview(db, admin)).students.filter((s) => s.pending);
+    expect(pending.map((s) => s.email)).toEqual(["wait@btu.edu.ge"]);
+    await expect(
+      addSkill(db, admin, { studentId, catalogSkillId: "SKL-001", dateEarned: "2026-10-21" }),
+    ).rejects.toThrow("Approve this student first");
+    const student = (await sessionFor(STUDENT))!;
+    await expect(approveStudent(db, student, studentId)).rejects.toBeInstanceOf(ForbiddenError);
+    await approveStudent(db, admin, studentId);
+    expect((await passport(studentId)).student).toMatchObject({ pendingApproval: false });
+    await expect(approveStudent(db, admin, studentId)).rejects.toThrow("not waiting");
+  });
+
+  it("removes a rejected sign-up together with its account", async () => {
+    const token = await signUp(
+      db,
+      { email: "nope@btu.edu.ge", password: "long-enough-pw", firstName: "No", lastName: "Pe" },
+      "r",
+    );
+    const studentId = (await getSessionUser(db, token))!.studentId!;
+    await rejectStudent(db, (await sessionFor(ADMIN))!, studentId);
+    expect(await getSessionUser(db, token)).toBeNull();
+    expect(
+      await db.select().from(schema.students).where(eq(schema.students.id, studentId)),
+    ).toHaveLength(0);
+  });
+
   it("issues a reserved passport once an administrator confirms the student's first skill", async () => {
     const token = await signUp(
       db,
@@ -615,6 +657,7 @@ describe("sign in and registration (spec §9)", () => {
     );
     const studentId = (await getSessionUser(db, token))!.studentId!;
     const admin = (await sessionFor(ADMIN))!;
+    await approveStudent(db, admin, studentId);
     expect(
       (
         await addSkill(db, admin, {

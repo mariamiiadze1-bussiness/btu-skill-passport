@@ -15,7 +15,7 @@ import { isPrintable } from "../pdf/generate";
 import { clearRateLimit, enforceRateLimit } from "../core/rate-limit";
 import { emailCodes, sessions, students, users } from "../db/schema";
 import { getMailer } from "../core/notifications";
-import { nextPassportId, selfRegisteredStudentId } from "../passport/students";
+import { nextPassportId, PENDING_APPROVAL, selfRegisteredStudentId } from "../passport/students";
 import { UserError } from "../core/errors";
 
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
@@ -123,6 +123,7 @@ async function studentForEmail(
       email,
       passportId: await nextPassportId(db),
       issuedAt: new Date().toISOString().slice(0, 10),
+      status: PENDING_APPROVAL,
     })
     .returning();
   return created!.id;

@@ -24,5 +24,11 @@ export function selfRegisteredStudentId() {
 
 export const isSelfRegistered = (id: string) => id.startsWith("BTU-S-");
 
+/**
+ * Status of a student who signed up themselves (Google or email) and is not in BTU's registry
+ * yet. An administrator approves them, or a registry row for their email confirms them.
+ */
+export const PENDING_APPROVAL = "Pending approval";
+
 export const sameName = (a: string, b: string) =>
   a.trim().toLowerCase().replace(/\s+/g, " ") === b.trim().toLowerCase().replace(/\s+/g, " ");

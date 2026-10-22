@@ -27,9 +27,11 @@ import {
   skillCatalog,
   skills,
   students,
+  users,
   verificationChecks,
 } from "./db/schema";
 import { isSkillCategory, STAMP_CATEGORIES } from "./passport/stamps";
+import { isSelfRegistered, PENDING_APPROVAL } from "./passport/students";
 import { UserError } from "./core/errors";
 
 export class ForbiddenError extends UserError {
@@ -188,8 +190,11 @@ export async function getAdminOverview(db: Db, user: SessionUser | null) {
       id: s.id,
       name: `${s.firstName} ${s.lastName}`,
       passportId: s.passportId,
+      email: s.email,
       version: latest.get(s.id) ?? 0,
       status: s.status,
+      pending: s.status === PENDING_APPROVAL,
+      signedUpAt: s.createdAt.toISOString(),
     })),
     catalog: catalog.map((c) => ({
       id: c.id,
@@ -260,12 +265,45 @@ function summarize(result: Awaited<ReturnType<typeof syncFromSource>>) {
   };
 }
 
+/** Confirms a student who signed up themselves: they become a BTU student skills can be added to. */
+export async function approveStudent(db: Db, user: SessionUser | null, studentId: unknown) {
+  requireAdmin(user);
+  const id = z.string().max(40).parse(studentId);
+  const [approved] = await db
+    .update(students)
+    .set({ status: "Active" })
+    .where(and(eq(students.id, id), eq(students.status, PENDING_APPROVAL)))
+    .returning({ id: students.id });
+  if (!approved) throw new UserError("That student is not waiting for approval.");
+  await db.insert(activityLog).values({
+    studentId: id,
+    actorUserId: user.id,
+    action: "Student approved",
+    status: "completed",
+  });
+  return { approved: id };
+}
+
+/** Removes a self sign-up that is not a BTU student: their account and reserved passport. */
+export async function rejectStudent(db: Db, user: SessionUser | null, studentId: unknown) {
+  requireAdmin(user);
+  const id = z.string().max(40).parse(studentId);
+  const [student] = await db.select().from(students).where(eq(students.id, id));
+  if (!student || student.status !== PENDING_APPROVAL || !isSelfRegistered(id))
+    throw new UserError("That student is not waiting for approval.");
+  await db.delete(users).where(eq(users.studentId, id));
+  await db.delete(students).where(eq(students.id, id));
+  return { rejected: id };
+}
+
 /** BTU staff add an award by hand (e.g. a one-off activity); the passport updates at once. */
 export async function addSkill(db: Db, user: SessionUser | null, input: unknown) {
   requireAdmin(user);
   const data = addSkillSchema.parse(input);
   const [student] = await db.select().from(students).where(eq(students.id, data.studentId));
   if (!student) throw new UserError("Student not found.");
+  if (student.status === PENDING_APPROVAL)
+    throw new UserError("Approve this student first (Waiting for approval, above).");
 
   let catalog = data.catalogSkillId
     ? (await db.select().from(skillCatalog).where(eq(skillCatalog.id, data.catalogSkillId)))[0]
