@@ -199,7 +199,7 @@ function AuthorizationPage() {
             <p aria-live="polite" role={message ? "alert" : undefined} className="mt-3 min-h-5 text-center text-xs font-semibold text-destructive">
               {t(message)}
             </p>
-            <p className="mt-2 text-center text-[11px] leading-5 text-muted-foreground">{t("By continuing, you agree to use the passport service in line with BTU policies.")}</p>
+            <p className="mt-2 text-center text-[11px] leading-5 text-muted-foreground">{t("By continuing, you agree to use the passport service in line with BTU policies.")} <Link to="/privacy" className="underline underline-offset-2">{t("Privacy")}</Link></p>
           </div>
         </section>
       </div>

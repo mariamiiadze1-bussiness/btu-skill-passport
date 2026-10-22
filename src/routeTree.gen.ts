@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as DotwellKnownDidDotjsonRouteImport } from './routes/[.]well-known.did[.]json'
 import { Route as PassportVersionRouteImport } from './routes/passport.$version'
@@ -34,6 +35,11 @@ const AdminRoute = AdminRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VerifyRoute = VerifyRouteImport.update({
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/privacy': typeof PrivacyRoute
   '/verify': typeof VerifyRoute
   '/.well-known/did.json': typeof DotwellKnownDidDotjsonRoute
   '/passport/$version': typeof PassportVersionRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/privacy': typeof PrivacyRoute
   '/verify': typeof VerifyRoute
   '/.well-known/did.json': typeof DotwellKnownDidDotjsonRoute
   '/passport/$version': typeof PassportVersionRoute
@@ -108,6 +116,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/privacy': typeof PrivacyRoute
   '/verify': typeof VerifyRoute
   '/.well-known/did.json': typeof DotwellKnownDidDotjsonRoute
   '/passport/$version': typeof PassportVersionRoute
@@ -123,6 +132,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/auth'
+    | '/privacy'
     | '/verify'
     | '/.well-known/did.json'
     | '/passport/$version'
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/auth'
+    | '/privacy'
     | '/verify'
     | '/.well-known/did.json'
     | '/passport/$version'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/auth'
+    | '/privacy'
     | '/verify'
     | '/.well-known/did.json'
     | '/passport/$version'
@@ -163,6 +175,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
+  PrivacyRoute: typeof PrivacyRoute
   VerifyRoute: typeof VerifyRoute
   DotwellKnownDidDotjsonRoute: typeof DotwellKnownDidDotjsonRoute
   PassportVersionRoute: typeof PassportVersionRoute
@@ -194,6 +207,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/verify': {
@@ -259,6 +279,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
+  PrivacyRoute: PrivacyRoute,
   VerifyRoute: VerifyRoute,
   DotwellKnownDidDotjsonRoute: DotwellKnownDidDotjsonRoute,
   PassportVersionRoute: PassportVersionRoute,
