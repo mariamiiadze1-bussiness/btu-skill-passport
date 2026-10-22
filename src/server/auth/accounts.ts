@@ -161,8 +161,14 @@ export async function startRegistration(db: Db, input: unknown, clientKey: strin
 
   const mailer = getMailer();
   const production = process.env.NODE_ENV === "production";
-  if (production && !mailer.delivers)
+  const unverified = production && !mailer.delivers && unverifiedSignUpAllowed();
+  if (production && !mailer.delivers && !unverified)
     throw new AuthError("Email sign-up is not available yet. Sign in with Google instead.");
+  // Without the inbox check, an email from BTU's registry could be claimed by anyone.
+  if (unverified && student)
+    throw new AuthError(
+      "This email belongs to a student in BTU's records. Sign in with Google instead.",
+    );
 
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   const row = {
@@ -174,14 +180,32 @@ export async function startRegistration(db: Db, input: unknown, clientKey: strin
     .insert(emailCodes)
     .values({ email, ...row })
     .onConflictDoUpdate({ target: emailCodes.email, set: row });
-  await mailer.send({
-    to: email,
-    subject: "Your BTU AI Skills Passport code",
-    text: `Your sign-up code is ${code}. It expires in 10 minutes.
+  if (!unverified)
+    await mailer.send({
+      to: email,
+      subject: "Your BTU AI Skills Passport code",
+      text: `Your sign-up code is ${code}. It expires in 10 minutes.
 
 If you did not try to create a BTU AI Skills Passport account, ignore this email.`,
-  });
-  return { devCode: production ? undefined : code };
+    });
+  // autoConfirm: the browser completes step 2 itself (testing without a mail service).
+  return { devCode: production && !unverified ? undefined : code, autoConfirm: unverified };
+}
+
+/**
+ * Testing switch for a hosted demo with no mail service yet (ALLOW_UNVERIFIED_SIGNUP=true):
+ * email sign-up skips the emailed code. Such accounts start "Pending approval" (see
+ * studentForEmail) and cannot claim a student already in BTU's registry. Leave it off once
+ * RESEND_API_KEY is set, so every sign-up proves the inbox again.
+ */
+export function unverifiedSignUpAllowed() {
+  return process.env["ALLOW_UNVERIFIED_SIGNUP"] === "true";
+}
+
+/** Whether the sign-up form needs a code step (false when the testing switch skips it). */
+export function signUpNeedsCode() {
+  const production = process.env.NODE_ENV === "production";
+  return !(production && !getMailer().delivers && unverifiedSignUpAllowed());
 }
 
 /** Registration step 2: checks the emailed code, then creates the account and signs it in. */
@@ -213,7 +237,14 @@ export async function register(db: Db, input: unknown, clientKey: string) {
   const passwordHash = await hashPassword(password);
   const [user] = await db
     .insert(users)
-    .values({ email, passwordHash, emailVerifiedAt: new Date(), role: "student", studentId })
+    .values({
+      email,
+      passwordHash,
+      // Only a delivered code proves the inbox; console/testing sign-ups stay unverified.
+      emailVerifiedAt: getMailer().delivers ? new Date() : null,
+      role: "student",
+      studentId,
+    })
     .onConflictDoNothing({ target: users.email })
     .returning({ id: users.id });
   if (!user) throw new AuthError("An account already exists for this email. Sign in instead.");

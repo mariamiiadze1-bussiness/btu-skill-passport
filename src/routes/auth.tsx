@@ -41,7 +41,7 @@ function AuthorizationPage() {
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const { googleEnabled, emailDomain } = Route.useLoaderData();
+  const { googleEnabled, emailDomain, signUpNeedsCode } = Route.useLoaderData();
   const { error } = Route.useSearch();
   const [message, setMessage] = useState(error ? (GOOGLE_ERRORS[error] ?? "Google sign-in failed. Please try again.") : "");
   const [busy, setBusy] = useState(false);
@@ -70,11 +70,14 @@ function AuthorizationPage() {
     try {
       if (mode === "register" && !codeSent) {
         const sent = await requestSignUpCode({ data: { email, password, firstName, lastName } });
-        setCodeSent(true);
-        setDevCode(sent.devCode);
-        return;
-      }
-      if (mode === "register") await signUp({ data: { email, password, firstName, lastName, code } });
+        if (!sent.autoConfirm) {
+          setCodeSent(true);
+          setDevCode(sent.devCode);
+          return;
+        }
+        // Testing mode without a mail service: no code step (the account waits for approval).
+        await signUp({ data: { email, password, firstName, lastName, code: sent.devCode } });
+      } else if (mode === "register") await signUp({ data: { email, password, firstName, lastName, code } });
       else await signIn({ data: { email, password } });
       setPassword("");
       await router.invalidate();
@@ -191,7 +194,7 @@ function AuthorizationPage() {
                 </label>
               )}
               <button type="submit" disabled={busy} className="flex w-full items-center justify-center rounded-full bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground transition hover:brightness-95 disabled:opacity-60">
-                {busy ? t("Please wait…") : mode === "signin" ? t("Sign in") : codeSent ? t("Create account") : t("Email me a code")}
+                {busy ? t("Please wait…") : mode === "signin" ? t("Sign in") : codeSent || !signUpNeedsCode ? t("Create account") : t("Email me a code")}
               </button>
             </form>
             </>)}

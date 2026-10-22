@@ -15,6 +15,7 @@ import {
   login,
   logout,
   register,
+  signUpNeedsCode,
   startRegistration,
   SESSION_TTL_SECONDS,
 } from "@/server/auth/accounts";
@@ -82,6 +83,7 @@ export const getSession = createServerFn({ method: "GET" }).handler(() =>
 export const getAuthOptions = createServerFn({ method: "GET" }).handler(() => ({
   googleEnabled: googleConfig() !== null,
   emailDomain: allowedEmailDomain(),
+  signUpNeedsCode: signUpNeedsCode(),
 }));
 
 export const signIn = createServerFn({ method: "POST" })

@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   addSkill,
@@ -737,6 +737,48 @@ describe("sign-up email codes", () => {
     for (let i = 0; i < 5; i++)
       await expect(register(db, { ...input, code: wrong }, `g${i}`)).rejects.toThrow("not correct");
     await expect(register(db, { ...input, code: devCode! }, "g9")).rejects.toThrow("expired");
+  });
+});
+
+describe("hosted testing without a mail service (ALLOW_UNVERIFIED_SIGNUP)", () => {
+  const env = { ...process.env };
+  beforeEach(() => {
+    process.env["NODE_ENV"] = "production";
+  });
+  afterEach(() => {
+    process.env["NODE_ENV"] = env["NODE_ENV"] ?? "test";
+    delete process.env["ALLOW_UNVERIFIED_SIGNUP"];
+  });
+  const input = {
+    email: "new.person@btu.edu.ge",
+    password: "long-enough-pw",
+    firstName: "New",
+    lastName: "Person",
+  };
+
+  it("is closed by default when no email can be delivered", async () => {
+    await expect(startRegistration(db, input, "u")).rejects.toThrow("not available");
+  });
+
+  it("when switched on, creates a pending, unverified account without a code step", async () => {
+    process.env["ALLOW_UNVERIFIED_SIGNUP"] = "true";
+    const sent = await startRegistration(db, input, "u");
+    expect(sent.autoConfirm).toBe(true);
+    const user = (await getSessionUser(
+      db,
+      await register(db, { ...input, code: sent.devCode }, "u"),
+    ))!;
+    expect((await passport(user.studentId!)).student).toMatchObject({ pendingApproval: true });
+    const [row] = await db.select().from(schema.users).where(eq(schema.users.id, user.id));
+    expect(row!.emailVerifiedAt).toBeNull();
+  });
+
+  it("never lets an unverified sign-up claim a student from BTU's registry", async () => {
+    process.env["ALLOW_UNVERIFIED_SIGNUP"] = "true";
+    await db.delete(schema.users).where(eq(schema.users.email, "btu-t-0002@btu.edu.ge"));
+    await expect(
+      startRegistration(db, { email: "btu-t-0002@btu.edu.ge", password: "long-enough-pw" }, "u"),
+    ).rejects.toThrow("belongs to a student");
   });
 });
 
