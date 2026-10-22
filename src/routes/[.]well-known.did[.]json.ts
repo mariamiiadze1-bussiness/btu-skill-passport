@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { appUrl } from "@/server/config";
-import { didDocument } from "@/server/issuer";
+import { appUrl } from "@/server/core/config";
+import { didDocument } from "@/server/blockchain/issuer";
 
 /**
  * BTU's issuer identity (W3C did:web). Served from BTU's own domain, it binds the issuer

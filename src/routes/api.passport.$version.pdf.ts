@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { getSessionUser } from "@/server/auth";
-import { readCookie, SESSION_COOKIE } from "@/server/cookies";
-import { getDb } from "@/server/db";
-import { officialPdf } from "@/server/passports";
+import { getSessionUser } from "@/server/auth/accounts";
+import { readCookie, SESSION_COOKIE } from "@/server/auth/cookies";
+import { getDb } from "@/server/db/client";
+import { officialPdf } from "@/server/passport/passports";
 
 /** The signed-in student's own official PDF, rebuilt and integrity-checked against the issued hash. */
 export const Route = createFileRoute("/api/passport/$version/pdf")({

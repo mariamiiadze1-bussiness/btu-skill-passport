@@ -49,6 +49,10 @@ const SECURITY_HEADERS: Record<string, string> = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
   "Cross-Origin-Opener-Policy": "same-origin",
+  // No other site may show these pages in a frame (stops clickjacking the admin buttons).
+  // Same-origin stays allowed: the passport page embeds its own PDF.
+  "X-Frame-Options": "SAMEORIGIN",
+  "Content-Security-Policy": "frame-ancestors 'self'; object-src 'self'; base-uri 'self'",
 };
 
 function withSecurityHeaders(response: Response) {

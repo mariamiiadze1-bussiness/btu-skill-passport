@@ -15,6 +15,13 @@
       "when": 1792612038429,
       "tag": "0001_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792683573978,
+      "tag": "0002_email_codes",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,11 @@
+import { existsSync, readFileSync } from "node:fs";
+import { basename } from "node:path";
+
 import { importPKCS8, SignJWT } from "jose";
 import readSheet from "read-excel-file/universal";
 
-import { UserError } from "../errors";
-import { TEST_SHEET_HEADER, TEST_SHEET_ROWS } from "../seed-data";
+import { UserError } from "../core/errors";
+import { TEST_SHEET_HEADER, TEST_SHEET_ROWS } from "../db/seed-data";
 import { parseWorkbook, type CellValue, type Column, type Workbook } from "./format";
 import type { RowOutcome, SyncResult } from "./sync";
 
@@ -40,6 +43,27 @@ export function excelSource(bytes: ArrayBuffer): RegistrySource {
       return {
         tabs: sheets.map((s) => ({ name: s.sheet, rows: s.data as CellValue[][], firstRow: 1 })),
       };
+    },
+  };
+}
+
+/**
+ * An Excel workbook on disk (REGISTRY_EXCEL_PATH) used as the live registry: BTU edits the
+ * file, the system re-reads it on every sync. Locally the file is also watched (see watchExcelFile).
+ */
+export function excelFilePath() {
+  const path = process.env.REGISTRY_EXCEL_PATH?.trim();
+  return path && existsSync(path) ? path : null;
+}
+
+export function excelFileSource(path: string): RegistrySource {
+  return {
+    id: `excel-file:${basename(path)}`,
+    async read() {
+      const bytes = readFileSync(path);
+      return excelSource(
+        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length),
+      ).read();
     },
   };
 }

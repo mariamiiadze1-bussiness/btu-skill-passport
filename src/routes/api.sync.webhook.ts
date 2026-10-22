@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { hasBearer, triggeredSync } from "@/server/sync-trigger";
+import { hasBearer, triggeredSync } from "@/server/registry";
 
 /** Called by the Google Sheet's Apps Script trigger on every edit (see README), so changes sync within seconds. */
 export const Route = createFileRoute("/api/sync/webhook")({

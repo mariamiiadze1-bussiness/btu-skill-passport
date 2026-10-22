@@ -1,6 +1,6 @@
 import { getRouteApi } from "@tanstack/react-router";
 
-import type { PassportView } from "@/server/passports";
+import type { PassportView } from "@/server/passport/passports";
 
 export type StudentPassport = NonNullable<PassportView>;
 export type PassportVersionView = StudentPassport["versions"][number];

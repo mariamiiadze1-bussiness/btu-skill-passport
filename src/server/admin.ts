@@ -1,16 +1,21 @@
 import { and, count, desc, eq, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 
-import { getAnchorProvider } from "./anchoring";
-import type { SessionUser } from "./auth";
-import type { Db } from "./db";
-import { anchorPending, issueVersions, latestOfficialVersions, OFFICIAL } from "./issuance";
-import { issuerAddress, issuerDid } from "./issuer";
+import { getAnchorProvider } from "./blockchain/anchoring";
+import type { SessionUser } from "./auth/accounts";
+import type { Db } from "./db/client";
+import {
+  anchorPending,
+  issueVersions,
+  latestOfficialVersions,
+  OFFICIAL,
+} from "./passport/issuance";
+import { issuerAddress, issuerDid } from "./blockchain/issuer";
 import { isPrintable } from "./pdf/generate";
 import {
   configuredRegistrySource,
   excelSource,
-  googleSheetsConfig,
+  registrySourceLabel,
   syncFromSource,
 } from "./registry";
 import {
@@ -23,9 +28,9 @@ import {
   skills,
   students,
   verificationChecks,
-} from "./schema";
-import { isSkillCategory, STAMP_CATEGORIES } from "./stamps";
-import { UserError } from "./errors";
+} from "./db/schema";
+import { isSkillCategory, STAMP_CATEGORIES } from "./passport/stamps";
+import { UserError } from "./core/errors";
 
 export class ForbiddenError extends UserError {
   constructor() {
@@ -138,7 +143,7 @@ export async function getAdminOverview(db: Db, user: SessionUser | null) {
       failedRecords: failedRecords.length,
     },
     registry: {
-      source: googleSheetsConfig() ? "Google Sheets" : null,
+      source: registrySourceLabel(),
       runs: runs.map((r) => ({
         id: r.id,
         source: r.source,
@@ -224,13 +229,13 @@ export async function getAdminOverview(db: Db, user: SessionUser | null) {
   };
 }
 
-/** Pull new verified records from the live registry (Google Sheets). */
+/** Pull new verified records from the live registry (Google Sheets or the Excel file). */
 export async function syncRegistry(db: Db, user: SessionUser | null) {
   requireAdmin(user);
   const source = configuredRegistrySource();
   if (!source)
     throw new UserError(
-      "No live registry is configured. Set the GOOGLE_SHEETS_* variables, or upload an Excel file instead.",
+      "No live registry is configured. Set REGISTRY_EXCEL_PATH or the GOOGLE_SHEETS_* variables, or upload an Excel file instead.",
     );
   return summarize(await syncFromSource(db, source, user.id));
 }

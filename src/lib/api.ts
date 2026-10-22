@@ -8,16 +8,23 @@ import {
   retryAnchoring,
   syncRegistry,
 } from "@/server/admin";
-import { getSessionUser, login, logout, register, SESSION_TTL_SECONDS } from "@/server/auth";
-import { SESSION_COOKIE } from "@/server/cookies";
-import { getDb } from "@/server/db";
-import { allowedEmailDomain } from "@/server/email-domain";
-import { UserError } from "@/server/errors";
-import { googleConfig } from "@/server/google";
-import { anchorPending } from "@/server/issuance";
-import { markNotificationsRead, unreadNotifications } from "@/server/notifications";
-import { getPassportForStudent } from "@/server/passports";
-import { verifyPassportCode, verifyPdfHash } from "@/server/verify";
+import {
+  getSessionUser,
+  login,
+  logout,
+  register,
+  startRegistration,
+  SESSION_TTL_SECONDS,
+} from "@/server/auth/accounts";
+import { SESSION_COOKIE } from "@/server/auth/cookies";
+import { getDb } from "@/server/db/client";
+import { allowedEmailDomain } from "@/server/core/config";
+import { UserError } from "@/server/core/errors";
+import { googleConfig } from "@/server/auth/google";
+import { anchorPending } from "@/server/passport/issuance";
+import { markNotificationsRead, unreadNotifications } from "@/server/core/notifications";
+import { getPassportForStudent } from "@/server/passport/passports";
+import { verifyPassportCode, verifyPdfHash } from "@/server/passport/verify";
 
 /**
  * Server functions: the only bridge between pages and the server. Each one reads the session
@@ -84,6 +91,12 @@ export const signIn = createServerFn({ method: "POST" })
     }),
   );
 
+export const requestSignUpCode = createServerFn({ method: "POST" })
+  .validator(asObject)
+  .handler(({ data }) =>
+    guarded(async () => startRegistration(await getDb(), data, clientKey())),
+  );
+
 export const signUp = createServerFn({ method: "POST" })
   .validator(asObject)
   .handler(({ data }) =>
@@ -113,7 +126,9 @@ export const getMyPassport = createServerFn({ method: "GET" }).handler(() =>
       await anchorPending(db, { waitMs: 0 }).catch(() => null);
       passport = await getPassportForStudent(db, user.studentId);
     }
-    return passport && { ...passport, notifications: await unreadNotifications(db, user.studentId) };
+    return (
+      passport && { ...passport, notifications: await unreadNotifications(db, user.studentId) }
+    );
   }),
 );
 
@@ -162,8 +177,6 @@ export const uploadRegistryExcel = createServerFn({ method: "POST" })
 export const addStudentSkill = createServerFn({ method: "POST" })
   .validator(asObject)
   .handler(({ data }) => guarded(async () => addSkill(await getDb(), await currentUser(), data)));
-
-
 
 export const retryBlockchain = createServerFn({ method: "POST" }).handler(() =>
   guarded(async () => retryAnchoring(await getDb(), await currentUser())),

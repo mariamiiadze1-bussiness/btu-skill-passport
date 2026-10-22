@@ -61,7 +61,7 @@ Database commands (these need `DATABASE_URL` set):
 ```sh
 npm run db:setup      # apply migrations + seed
 npm run db:sync       # sync from Google Sheets with no time limit (bulk loads)
-npm run db:generate   # after editing src/server/schema.ts, create a new migration in drizzle/
+npm run db:generate   # after editing src/server/db/schema.ts, create a new migration in drizzle/
 ```
 
 ## Set up the blockchain (Ethereum Sepolia)
@@ -70,7 +70,7 @@ npm run db:generate   # after editing src/server/schema.ts, create a new migrati
    `node -e "import('viem/accounts').then(m=>{const k=m.generatePrivateKey();console.log(k, m.privateKeyToAccount(k).address)})"`
 2. Send the address free test ETH from a Sepolia faucet, for example [Google Cloud's faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia). 0.05 ETH covers thousands of batches.
 3. Set `ANCHOR_PROVIDER=evm` (and optionally `ANCHOR_RPC_URL` for a dedicated RPC), then restart. Every sync now anchors one transaction, shown with an Etherscan link on `/verify` and in the admin panel.
-4. To use another network, set `ANCHOR_CHAIN` (`polygonAmoy`, `baseSepolia`, `polygon`, …). To use a different technology, implement `AnchorProvider` in `src/server/anchoring/`.
+4. To use another network, set `ANCHOR_CHAIN` (`polygonAmoy`, `baseSepolia`, `polygon`, …). To use a different technology, implement `AnchorProvider` in `src/server/blockchain/anchoring.ts`.
 
 ## Set up Google Sheets sync
 
@@ -103,7 +103,7 @@ A daily Vercel Cron (`vercel.json`) and the admin **Sync now** button act as a s
    - `https://<your-domain>/api/auth/google/callback`
 3. Put the client ID and secret in `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` and restart. Until then, the button explains that Google sign-in isn't connected.
 
-**BTU email verification codes** (planned): the `users.email_verified_at` field and the `Mailer` interface in `src/server/mail.ts` are in place. Add a provider there and a code step to registration. Google sign-in already marks emails as verified.
+**BTU email verification codes** (planned): the `users.email_verified_at` field and the `Mailer` interface in `src/server/core/notifications.ts` are in place. Add a provider there and a code step to registration. Google sign-in already marks emails as verified.
 
 ## Deploy to Vercel
 
@@ -116,10 +116,14 @@ A daily Vercel Cron (`vercel.json`) and the admin **Sync now** button act as a s
 ## Project layout
 
 ```
+src/server/core/       config, errors, hashing/codes, rate limits, notifications + mailer
+src/server/db/         database client, schema, seed (BTU test workbook)
+src/server/auth/       accounts (password sign-in, registration, sessions), cookies, Google OAuth
 src/server/registry/   sheet format, validation, sync engine, Google Sheets / Excel sources
+src/server/passport/   issuance (versions), passport view/PDF download, stamps, public verification
+src/server/blockchain/ Merkle tree, issuer key + DID, anchoring providers (EVM)
 src/server/pdf/        PDF generator + embedded template and stamp images (npm run assets:pdf)
-src/server/anchoring/  blockchain providers (EVM), swappable
-src/server/            schema, issuance, Merkle tree, issuer identity, auth, admin, verify
+src/server/admin.ts    admin panel actions (sync, add skill, Excel import, retry anchoring)
 src/lib/api.ts         server functions: the only bridge between pages and the server
 src/routes/            pages and HTTP endpoints (PDF, DID, webhook, cron, Google OAuth)
 drizzle/               SQL migrations

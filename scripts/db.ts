@@ -1,10 +1,10 @@
 // Usage: npm run db:migrate | db:seed | db:setup | db:sync   (reads settings from .env)
 import { migrate as migratePg } from "drizzle-orm/postgres-js/migrator";
 
-import { getDb, loadLocalEnv } from "../src/server/db";
-import { anchorPending } from "../src/server/issuance";
+import { getDb, loadLocalEnv } from "../src/server/db/client";
+import { anchorPending } from "../src/server/passport/issuance";
 import { configuredRegistrySource, syncFromSource } from "../src/server/registry";
-import { seedDatabase } from "../src/server/seed";
+import { seedDatabase } from "../src/server/db/seed";
 
 loadLocalEnv();
 const command = process.argv[2];

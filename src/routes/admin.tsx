@@ -179,13 +179,13 @@ function RegistryPanel({ data, busy, onSync, onUpload }: { data: Data; busy: str
           <h2 className="text-xl">{t("Skill registry sync")}</h2>
           <p className="text-sm text-muted-foreground">
             {data.registry.source
-              ? t("Connected to Google Sheets. New CONFIRMED records are added to the right passports automatically; re-syncing never adds a record twice.")
+              ? `${t("Connected to")} ${data.registry.source}. ${t("New CONFIRMED records are added to the right passports automatically; re-syncing never adds a record twice.")}`
               : t("Google Sheets is not connected yet (see README). You can import BTU's Excel workbook instead — it goes through exactly the same checks.")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button disabled={!!busy || !data.registry.source} onClick={onSync} className={`${button} bg-foreground text-background`}>
-            {busy === "sync" ? t("Syncing…") : t("Sync from Google Sheets")}
+            {busy === "sync" ? t("Syncing…") : t("Sync now")}
           </button>
           <label className={`${button} cursor-pointer border-2 border-foreground ${busy ? "pointer-events-none opacity-40" : ""}`}>
             {busy === "upload" ? t("Importing…") : t("Import Excel (.xlsx)")}

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { Asterisks } from "@/components/passport/Stamp";
-import { getAuthOptions, signIn, signUp } from "@/lib/api";
+import { getAuthOptions, requestSignUpCode, signIn, signUp } from "@/lib/api";
 import { LanguageToggle, useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/auth")({
@@ -46,6 +46,13 @@ function AuthorizationPage() {
   const [message, setMessage] = useState(error ? (GOOGLE_ERRORS[error] ?? "Google sign-in failed. Please try again.") : "");
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  // Registration is two steps: request an emailed code, then confirm it.
+  const [codeSent, setCodeSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [devCode, setDevCode] = useState<string | undefined>();
+  const resetCode = () => { setCodeSent(false); setCode(""); setDevCode(undefined); };
+  // Google (BTU Workspace) is the main way in; email + password stays as a fallback, e.g. for admins.
+  const [showEmailForm, setShowEmailForm] = useState(!googleEnabled);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,7 +68,13 @@ function AuthorizationPage() {
     }
     setBusy(true);
     try {
-      if (mode === "register") await signUp({ data: { email, password, firstName, lastName } });
+      if (mode === "register" && !codeSent) {
+        const sent = await requestSignUpCode({ data: { email, password, firstName, lastName } });
+        setCodeSent(true);
+        setDevCode(sent.devCode);
+        return;
+      }
+      if (mode === "register") await signUp({ data: { email, password, firstName, lastName, code } });
       else await signIn({ data: { email, password } });
       setPassword("");
       await router.invalidate();
@@ -104,17 +117,31 @@ function AuthorizationPage() {
         <section className="flex items-center justify-center p-6 sm:p-10 md:p-12">
           <div className="w-full max-w-md">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">{t("Student access")}</p>
-            <h2 className="mt-2 text-3xl sm:text-4xl">{mode === "signin" ? t("Welcome back") : t("Create account")}</h2>
+            <h2 className="mt-2 text-3xl sm:text-4xl">{!showEmailForm ? t("Welcome") : mode === "signin" ? t("Welcome back") : t("Create account")}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              {mode === "signin" ? t("Sign in to view your BTU AI Skills Passport.") : t("Create your passport with your BTU email. BTU adds your skills as they are confirmed.")}
+              {!showEmailForm ? t("Sign in or create your passport with your BTU Google account.") : mode === "signin" ? t("Sign in to view your BTU AI Skills Passport.") : t("Create your passport with your BTU email. BTU adds your skills as they are confirmed.")}
             </p>
 
-            <div className="mt-7 grid grid-cols-2 rounded-full bg-muted p-1" role="tablist" aria-label={t("Account access")}>
-              <button type="button" role="tab" aria-selected={mode === "signin"} onClick={() => { setMode("signin"); setMessage(""); }}
+            <a href="/api/auth/google/start" className="mt-7 flex w-full items-center justify-center gap-3 rounded-full bg-primary px-5 py-3.5 text-sm font-bold text-primary-foreground transition hover:brightness-95">
+              <span className="grid h-6 w-6 place-items-center rounded-full bg-white"><GoogleMark /></span> {t("Continue with Google")}
+            </a>
+            <p className="mt-2 text-center text-[11px] text-muted-foreground">
+              {googleEnabled ? `${t("Only")} @${emailDomain} ${t("Google accounts. First time? Your passport is created automatically.")}` : t("Google sign-in becomes available once BTU connects its Google Workspace.")}
+            </p>
+
+            {!showEmailForm ? (
+              <button type="button" onClick={() => setShowEmailForm(true)} className="mt-6 w-full text-center text-xs font-bold uppercase tracking-wide text-muted-foreground underline underline-offset-4 hover:text-foreground">
+                {t("Use email and password instead")}
+              </button>
+            ) : (<>
+            <div className="my-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground"><span className="h-px flex-1 bg-border" /> {t("or with email and password")} <span className="h-px flex-1 bg-border" /></div>
+
+            <div className="grid grid-cols-2 rounded-full bg-muted p-1" role="tablist" aria-label={t("Account access")}>
+              <button type="button" role="tab" aria-selected={mode === "signin"} onClick={() => { setMode("signin"); setMessage(""); resetCode(); }}
                 className={`rounded-full px-4 py-2.5 text-sm font-bold transition-colors ${mode === "signin" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
                 {t("Sign in")}
               </button>
-              <button type="button" role="tab" aria-selected={mode === "register"} onClick={() => { setMode("register"); setMessage(""); }}
+              <button type="button" role="tab" aria-selected={mode === "register"} onClick={() => { setMode("register"); setMessage(""); resetCode(); }}
                 className={`rounded-full px-4 py-2.5 text-sm font-bold transition-colors ${mode === "register" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
                 {t("Register")}
               </button>
@@ -138,7 +165,7 @@ function AuthorizationPage() {
               )}
               <label className="block text-sm font-semibold" htmlFor="auth-email">
                 {t("BTU email")}
-                <input id="auth-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                <input id="auth-email" type="email" autoComplete="email" required value={email} onChange={(e) => { setEmail(e.target.value); resetCode(); }}
                   className="mt-1.5 w-full rounded-xl border bg-background px-4 py-3 font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder={`name@${emailDomain}`} />
               </label>
               <label className="block text-sm font-semibold" htmlFor="auth-password">
@@ -152,16 +179,22 @@ function AuthorizationPage() {
                   </button>
                 </span>
               </label>
+              {mode === "register" && codeSent && (
+                <label className="block text-sm font-semibold" htmlFor="auth-code">
+                  {t("Code from your email")}
+                  <input id="auth-code" inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} required autoFocus value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                    className="mt-1.5 w-full rounded-xl border bg-background px-4 py-3 font-mono text-lg tracking-[0.4em] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" placeholder="000000" />
+                  <span className="mt-1.5 block text-xs font-normal text-muted-foreground">
+                    {t("We sent a 6-digit code to")} {email}. {t("It expires in 10 minutes.")}
+                    {devCode && <> <br /><strong>{t("Development mode — your code is")} {devCode}</strong></>}
+                  </span>
+                </label>
+              )}
               <button type="submit" disabled={busy} className="flex w-full items-center justify-center rounded-full bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground transition hover:brightness-95 disabled:opacity-60">
-                {busy ? t("Please wait…") : mode === "signin" ? t("Sign in") : t("Create account")}
+                {busy ? t("Please wait…") : mode === "signin" ? t("Sign in") : codeSent ? t("Create account") : t("Email me a code")}
               </button>
             </form>
-
-            <div className="my-5 flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground"><span className="h-px flex-1 bg-border" /> {t("or continue with")} <span className="h-px flex-1 bg-border" /></div>
-            <a href="/api/auth/google/start" className="flex w-full items-center justify-center gap-3 rounded-full border-2 border-foreground/15 px-5 py-3 text-sm font-bold transition hover:border-foreground/40 hover:bg-muted">
-                  <GoogleMark /> {t("Continue with Google")}
-                </a>
-            {!googleEnabled && <p className="mt-2 text-center text-[11px] text-muted-foreground">{t("Google sign-in becomes available once BTU connects its Google Workspace.")}</p>}
+            </>)}
 
             <p aria-live="polite" role={message ? "alert" : undefined} className="mt-3 min-h-5 text-center text-xs font-semibold text-destructive">
               {t(message)}

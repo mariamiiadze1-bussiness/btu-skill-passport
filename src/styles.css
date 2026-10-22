@@ -90,10 +90,6 @@
   border-radius: calc(var(--radius) + 8px);
 }
 
-@utility stamp-tri {
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
-}
-
 @media print {
   .no-print { display: none !important; }
   body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }

@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { serializeCookie } from "@/server/cookies";
-import { getDb } from "@/server/db";
-import { createAuthRequest, GoogleAuthError, OAUTH_COOKIE } from "@/server/google";
-import { hitRateLimit } from "@/server/rate-limit";
+import { serializeCookie } from "@/server/auth/cookies";
+import { getDb } from "@/server/db/client";
+import { createAuthRequest, GoogleAuthError, OAUTH_COOKIE } from "@/server/auth/google";
+import { hitRateLimit } from "@/server/core/rate-limit";
 
 export const Route = createFileRoute("/api/auth/google/start")({
   server: {

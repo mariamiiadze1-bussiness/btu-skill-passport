@@ -2,6 +2,27 @@
 
 How the system meets the hackathon brief (_ჰაკათონის დავალების აღწერა_), section by section.
 
+## Folder map
+
+```
+src/
+├── routes/              pages and HTTP endpoints (TanStack file routing: PDF download, DID, webhook, cron, OAuth)
+├── components/passport/ UI pieces shared by pages (app shell, stamps, QR scanner)
+├── lib/                 browser-side helpers; lib/api.ts is the only bridge from pages to the server
+├── test/                end-to-end server tests (in-memory Postgres) and routing tests
+└── server/              everything that runs only on the server
+    ├── core/            config, errors, hashing and codes, rate limits, notifications + mailer
+    ├── db/              database client, schema (tables), seed from BTU's test workbook
+    ├── auth/            accounts (password sign-in, registration, sessions), cookies, Google OAuth
+    ├── registry/        read the Google Sheet / Excel, validate rows, sync new skills, write back
+    ├── passport/        issue versions, show and download a passport, stamp types, public verification
+    ├── blockchain/      Merkle tree, BTU issuer key + DID, anchoring the batch root on-chain
+    ├── pdf/             passport PDF generator and its embedded artwork
+    └── admin.ts         admin panel actions (sync now, add skill, Excel import, retry anchoring)
+```
+
+Data flows top to bottom: **registry** → **passport** (issuance) → **pdf** + **blockchain** → **db**; **auth** guards who can see what, and every route calls the server only through `lib/api.ts` or its own endpoint.
+
 ## Overview
 
 ```
@@ -13,10 +34,10 @@ How the system meets the hackathon brief (_ჰაკათონის დავ
                           registry/sync.ts    match student → skip processed Record IDs
                                               → skip duplicates → add awards
                                                                   ▼
-                          issuance.ts         one new version per affected student:
+                          passport/issuance.ts one new version per affected student:
                                               PDF → SHA-256 → Merkle leaf → BTU signature
                                                                   ▼
-                          anchoring/          one Merkle root per batch → Ethereum (Sepolia)
+                          blockchain/          one Merkle root per batch → Ethereum (Sepolia)
                                                                   ▼
                           PostgreSQL          versions become "latest" only once anchored
                                                                   ▼
@@ -28,10 +49,10 @@ How the system meets the hackathon brief (_ჰაკათონის დავ
 | Data source     | `src/server/registry/sources.ts`                                        | Implementing `RegistrySource` (e.g. a BTU student-system API)           |
 | Sheet columns   | `src/server/registry/format.ts` → `COLUMNS`                             | Adding header aliases; column order doesn't matter                      |
 | PDF design      | `src/server/pdf/` (template + stamps, embedded by `npm run assets:pdf`) | Replacing the asset files and coordinates                               |
-| Blockchain      | `src/server/anchoring/`                                                 | `ANCHOR_CHAIN` (any EVM chain), or a new `AnchorProvider`               |
-| Issuer identity | `src/server/issuer.ts`, `/.well-known/did.json`                         | `ISSUER_DID` (e.g. `did:web:btu.edu.ge`) and `ISSUER_PRIVATE_KEY`       |
-| Email           | `src/server/mail.ts`                                                    | Implementing `Mailer` (for BTU email verification codes, notifications) |
-| Database        | `src/server/schema.ts`, `drizzle/`                                      | Any PostgreSQL (`DATABASE_URL`)                                         |
+| Blockchain      | `src/server/blockchain/anchoring.ts`                                    | `ANCHOR_CHAIN` (any EVM chain), or a new `AnchorProvider`               |
+| Issuer identity | `src/server/blockchain/issuer.ts`, `/.well-known/did.json`              | `ISSUER_DID` (e.g. `did:web:btu.edu.ge`) and `ISSUER_PRIVATE_KEY`       |
+| Email           | `src/server/core/notifications.ts`                                      | Implementing `Mailer` (for BTU email verification codes, notifications) |
+| Database        | `src/server/db/schema.ts`, `drizzle/`                                   | Any PostgreSQL (`DATABASE_URL`)                                         |
 
 ## §1 Unique passport
 
@@ -54,8 +75,12 @@ How the system meets the hackathon brief (_ჰაკათონის დავ
 ## §3 PDF generation
 
 - Generated on the server with `pdf-lib` on BTU's original 4-page template; nobody fills PDFs by hand.
+- Artwork lives in `src/server/pdf/assets/`: the template, BTU's three skill stamps and the five cover stickers. `npm run assets:pdf` draws the static artwork (cover sticker cluster, stamp legend on the About page) onto the template once and embeds everything as base64.
+- Cover: name, surname, the fixed **first-issue date**, the verification code + QR and "VERSION n · date" of this version.
+- Each skill stamp is pressed at a small angle derived from the skill name, so it looks hand-stamped but stays reproducible.
 - More than 10 skills → extra card pages; more than 5 → extra detail-table pages (copies of the template pages).
 - Long names shrink to fit, then wrap onto two lines.
+- Changing the design changes the bytes, so versions issued before the change no longer re-generate to their anchored hash. After a design change, start the demo from a fresh database (locally: delete `.data/pglite`; it migrates and re-seeds on the next start).
 - **Byte-for-byte reproducible**: fixed metadata dates and no locale-dependent formatting. An issued PDF is never stored; it is rebuilt on download and served only if its SHA-256 equals the anchored hash.
 
 ## §5 Blockchain verification
@@ -87,6 +112,10 @@ How the system meets the hackathon brief (_ჰაკათონის დავ
 ## §9 Student access
 
 - Sign-in only with `@btu.edu.ge` accounts: password (scrypt-hashed, rate-limited) or Google Workspace OAuth (PKCE, nonce, signed ID token, `hd` claim checked).
+- Password sign-up proves the student owns the mailbox first: a 6-digit code is emailed (10 minutes, 5 tries) and no account exists until it is confirmed, so nobody can claim another student's passport by typing their email. Outside production the code is also shown on screen; in production a mail provider (`RESEND_API_KEY`, `MAIL_FROM`) is required, otherwise sign-up is Google-only.
+- Sign-in attempts are limited per IP, per IP+email and per email (across all IPs).
+- Pages can't be framed by other sites (`X-Frame-Options: SAMEORIGIN`, CSP `frame-ancestors 'self'`); expired sessions are deleted by the daily cron.
+- `/verify` rebuilds each version's Merkle leaf from the record instead of trusting the stored one, so an edited database value breaks the signature and blockchain checks. It shows initials only.
 - Students can only ever load their own passport. The PDF endpoint checks the session itself.
 - Admin actions check the role on the server in every function; CSRF protection covers all server functions; SQL is parameterized through Drizzle.
 

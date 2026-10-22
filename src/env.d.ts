@@ -16,6 +16,7 @@ declare namespace NodeJS {
     ANCHOR_CHAIN?: string;
     ANCHOR_RPC_URL?: string;
     REGISTRY_SOURCE?: string;
+    REGISTRY_EXCEL_PATH?: string;
     GOOGLE_SHEETS_SPREADSHEET_ID?: string;
     GOOGLE_SHEETS_TAB?: string;
     GOOGLE_SERVICE_ACCOUNT_EMAIL?: string;

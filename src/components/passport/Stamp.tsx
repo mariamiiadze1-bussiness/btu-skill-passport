@@ -2,27 +2,18 @@ import type { SkillType } from "@/lib/passport-data";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
+/** BTU's stamp artwork (the same images the PDF uses), tilted slightly like a real stamp. */
+const STAMPS: Record<SkillType, { src: string; label: string; className: string }> = {
+  AI_SKILL: { src: "/stamps/ai-skill.png", label: "AI Skill stamp", className: "aspect-[328/284] -rotate-3" },
+  AI_APPLIED: { src: "/stamps/ai-applied-skill.png", label: "AI Applied Skill stamp", className: "aspect-[656/211] rotate-[-5deg]" },
+  AI_ADVANCED: { src: "/stamps/ai-advanced-skill.png", label: "AI Advanced Skill stamp", className: "aspect-square rotate-3" },
+};
+
 export function Stamp({ type, size = "md" }: { type: SkillType; size?: "sm" | "md" }) {
   const { t } = useI18n();
-  const s = size === "sm";
-  if (type === "AI_SKILL")
-    return (
-      <div aria-label={t("AI Skill stamp")} className={cn("stamp-tri flex shrink-0 items-end justify-center bg-stamp-red pb-1.5 text-center font-display uppercase leading-none text-destructive-foreground", s ? "h-10 w-11 text-[6px]" : "h-16 w-[72px] text-[8px]")}>
-        <span>AI<br />{t("Skill")}</span>
-      </div>
-    );
-  if (type === "AI_APPLIED")
-    return (
-      <div aria-label={t("AI Applied Skill")} className={cn("shrink-0 -rotate-6 rounded-sm bg-stamp-purple px-2 py-1 text-center font-display uppercase leading-tight text-destructive-foreground", s ? "text-[7px]" : "text-[10px]")}>
-        {t("AI Applied Skill")}
-        <div className="font-sans text-[0.8em] font-medium normal-case opacity-90">{t("applied learning")}</div>
-      </div>
-    );
-  return (
-    <div aria-label={t("AI Advanced Skill")} className={cn("grid shrink-0 place-items-center rounded-full border-2 border-dashed border-stamp-cyan bg-stamp-navy text-center font-display uppercase leading-none text-destructive-foreground", s ? "h-10 w-10 text-[6px]" : "h-16 w-16 text-[8px]")}>
-      AI<br />{t("Adv.")}<br />{t("Skill")}
-    </div>
-  );
+  const stamp = STAMPS[type];
+  const height = type === "AI_APPLIED" ? (size === "sm" ? "h-6" : "h-8") : size === "sm" ? "h-10" : "h-16";
+  return <img src={stamp.src} alt={t(stamp.label)} className={cn("w-auto shrink-0 select-none", height, stamp.className)} draggable={false} />;
 }
 
 export function Asterisks({ n = 3, vertical = false }: { n?: number; vertical?: boolean }) {

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
-import { allowedEmailDomain, isAllowedEmail } from "../email-domain";
+import { allowedEmailDomain, isAllowedEmail } from "../core/config";
 import { isPrintable } from "../pdf/generate";
-import { isSkillCategory, STAMP_CATEGORIES, type SkillCategory } from "../stamps";
+import { isSkillCategory, STAMP_CATEGORIES, type SkillCategory } from "../passport/stamps";
 
 /**
  * BTU's registry formats. Two layouts are accepted, both described in BTU's materials:

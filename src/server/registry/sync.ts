@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 
-import type { Db } from "../db";
-import { anchorPending, issueVersions, OFFICIAL, withLock } from "../issuance";
+import type { Db } from "../db/client";
+import { anchorPending, issueVersions, OFFICIAL, withLock } from "../passport/issuance";
 import {
   activityLog,
   importRecords,
@@ -10,8 +10,8 @@ import {
   skillCatalog,
   skills,
   students,
-} from "../schema";
-import { isSelfRegistered, nextPassportId, sameName } from "../students";
+} from "../db/schema";
+import { isSelfRegistered, nextPassportId, sameName } from "../passport/students";
 import {
   parseWorkbook,
   rowHash,
@@ -21,7 +21,7 @@ import {
   type SheetTable,
   type Workbook,
 } from "./format";
-import { UserError } from "../errors";
+import { UserError } from "../core/errors";
 
 /**
  * Registry → passports. Implements the hackathon spec §2 and §4:

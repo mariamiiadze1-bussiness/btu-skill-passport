@@ -1,9 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { AuthError, getSessionUser, SESSION_TTL_SECONDS, signInWithGoogle } from "@/server/auth";
-import { readCookie, serializeCookie, SESSION_COOKIE } from "@/server/cookies";
-import { getDb } from "@/server/db";
-import { completeAuth, GoogleAuthError, OAUTH_COOKIE } from "@/server/google";
+import {
+  AuthError,
+  getSessionUser,
+  SESSION_TTL_SECONDS,
+  signInWithGoogle,
+} from "@/server/auth/accounts";
+import { readCookie, serializeCookie, SESSION_COOKIE } from "@/server/auth/cookies";
+import { getDb } from "@/server/db/client";
+import { completeAuth, GoogleAuthError, OAUTH_COOKIE } from "@/server/auth/google";
 
 export const Route = createFileRoute("/api/auth/google/callback")({
   server: {

@@ -9,7 +9,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { addSkill, ForbiddenError, getAdminOverview, importExcel } from "@/server/admin";
-import { setAnchorProvider, type AnchorProvider } from "@/server/anchoring";
+import { setAnchorProvider, type AnchorProvider } from "@/server/blockchain/anchoring";
 import {
   AuthError,
   getSessionUser,
@@ -17,26 +17,38 @@ import {
   logout,
   register,
   signInWithGoogle,
+  startRegistration,
   type SessionUser,
-} from "@/server/auth";
-import { hashPassword, newVerificationCode, sha256Bytes, verifyPassword } from "@/server/crypto";
-import type { Db } from "@/server/db";
-import { isAllowedEmail } from "@/server/email-domain";
-import { checkIdTokenClaims, GoogleAuthError, parseOAuthCookie } from "@/server/google";
-import { anchorPending } from "@/server/issuance";
-import { buildMerkleTree, verifyMerkleProof } from "@/server/merkle";
-import { getPassportForStudent, officialPdf } from "@/server/passports";
+} from "@/server/auth/accounts";
+import {
+  hashPassword,
+  newVerificationCode,
+  sha256Bytes,
+  verifyPassword,
+} from "@/server/core/crypto";
+import type { Db } from "@/server/db/client";
+import { isAllowedEmail } from "@/server/core/config";
+import { checkIdTokenClaims, GoogleAuthError, parseOAuthCookie } from "@/server/auth/google";
+import { anchorPending } from "@/server/passport/issuance";
+import { buildMerkleTree, verifyMerkleProof } from "@/server/blockchain/merkle";
+import { getPassportForStudent, officialPdf } from "@/server/passport/passports";
 import { generatePassportPdf } from "@/server/pdf/generate";
-import { RateLimitError } from "@/server/rate-limit";
-import { testWorkbookSource } from "@/server/registry";
+import { RateLimitError } from "@/server/core/rate-limit";
+import { configuredRegistrySource, syncFromSource, testWorkbookSource } from "@/server/registry";
 import { runSync } from "@/server/registry/sync";
-import * as schema from "@/server/schema";
-import { TEST_SHEET_HEADER, TEST_SHEET_ROWS } from "@/server/seed-data";
-import { seedDatabase } from "@/server/seed";
-import { verifyPassportCode, verifyPdfHash } from "@/server/verify";
+import * as schema from "@/server/db/schema";
+import { TEST_SHEET_HEADER, TEST_SHEET_ROWS } from "@/server/db/seed-data";
+import { seedDatabase } from "@/server/db/seed";
+import { verifyPassportCode, verifyPdfHash } from "@/server/passport/verify";
 
 const ADMIN = { email: "admin@btu.edu.ge", password: "admin-test-password-1" };
 const STUDENT = { email: "btu-t-0001@btu.edu.ge", password: "student-test-pass" };
+
+/** Both registration steps, using the code a non-production server returns. */
+async function signUp(target: Db, input: Record<string, string>, key: string) {
+  const { devCode } = await startRegistration(target, input, key);
+  return register(target, { ...input, code: devCode }, key);
+}
 const INJECTIONS = [
   "' OR '1'='1",
   "admin@btu.edu.ge' --",
@@ -298,6 +310,19 @@ describe("registry sync (spec §2, §4)", () => {
     });
   });
 
+  it("reads an Excel file on disk as the live registry (REGISTRY_EXCEL_PATH)", async () => {
+    process.env["REGISTRY_EXCEL_PATH"] = "fixtures/btu-hackathon-test-data.xlsx";
+    try {
+      const source = configuredRegistrySource()!;
+      expect(source.id).toBe("excel-file:btu-hackathon-test-data.xlsx");
+      expect((await syncFromSource(db, source)).totals).toMatchObject({ synced: 44, failed: 0 });
+      // Re-reading the unchanged file adds nothing.
+      expect((await syncFromSource(db, source)).totals).toMatchObject({ synced: 0 });
+    } finally {
+      delete process.env["REGISTRY_EXCEL_PATH"];
+    }
+  });
+
   it("imports BTU's actual .xlsx file the same way", async () => {
     const admin = await sessionFor(ADMIN);
     const file = new File([readFileSync("fixtures/btu-hackathon-test-data.xlsx")], "test.xlsx");
@@ -317,7 +342,7 @@ describe("blockchain verification (spec §5–§8)", () => {
       valid: true,
       isCurrent: true,
       version: 1,
-      holderInitials: "G. Kapanadze",
+      holderInitials: "G. K.",
       passportIdMasked: "BTU-AI-000•••",
     });
     if (!r.valid) throw new Error("expected valid");
@@ -348,6 +373,21 @@ describe("blockchain verification (spec §5–§8)", () => {
       valid: true,
       version: 1,
     });
+  });
+
+  it("catches a PDF hash edited directly in the database", async () => {
+    const code = (await passport("BTU-T-0001")).versions[0]!.verificationCode;
+    const forged = sha256Bytes(new Uint8Array([1, 2, 3]));
+    await db
+      .update(schema.passportVersions)
+      .set({ pdfSha256: forged })
+      .where(eq(schema.passportVersions.verificationCode, code));
+    const r = await verifyPassportCode(db, code, "t", forged);
+    if (!r.valid) throw new Error("expected the record to be found");
+    // The database alone would call the forged file a match; the signature and anchor don't.
+    expect(r.file?.ok).toBe(true);
+    expect(r.issuer.ok).toBe(false);
+    expect(r.blockchain.ok).toBe(false);
   });
 
   it("marks an old version authentic but superseded", async () => {
@@ -440,7 +480,9 @@ describe("PDF generation (spec §3)", () => {
     firstName: "Giorgi",
     lastName: "Kapanadze",
     passportId: "BTU-AI-000125",
+    firstIssuedOn: "2026-09-01",
     issuedOn: "2026-10-21",
+    version: 2,
     verificationCode: "BTU-AAAA-BBBB-CCCC",
     verifyUrl: "https://x/verify",
     skills: [],
@@ -533,7 +575,7 @@ describe("sign in and registration (spec §9)", () => {
   });
 
   it("quick registration reserves a passport that BTU has not issued yet", async () => {
-    const token = await register(
+    const token = await signUp(
       db,
       {
         email: "nino.new@btu.edu.ge",
@@ -561,7 +603,7 @@ describe("sign in and registration (spec §9)", () => {
   });
 
   it("issues a reserved passport once an administrator confirms the student's first skill", async () => {
-    const token = await register(
+    const token = await signUp(
       db,
       {
         email: "reserved@btu.edu.ge",
@@ -589,7 +631,7 @@ describe("sign in and registration (spec §9)", () => {
   });
 
   it("later matches a self-registered student to their BTU Student ID by email", async () => {
-    const token = await register(
+    const token = await signUp(
       db,
       {
         email: "btu-t-0099@btu.edu.ge",
@@ -611,22 +653,47 @@ describe("sign in and registration (spec §9)", () => {
     await db.delete(schema.users).where(eq(schema.users.email, "btu-t-0002@btu.edu.ge"));
     const user = (await getSessionUser(
       db,
-      await register(db, { email: "BTU-T-0002@btu.edu.ge", password: "long-enough-pw" }, "r"),
+      await signUp(db, { email: "BTU-T-0002@btu.edu.ge", password: "long-enough-pw" }, "r"),
     ))!;
     expect(user).toMatchObject({ role: "student", studentId: "BTU-T-0002" });
   });
 
   it("refuses duplicate accounts and names the passport cannot print", async () => {
     await expect(
-      register(db, { email: STUDENT.email, password: "long-enough-pw" }, "r"),
+      signUp(db, { email: STUDENT.email, password: "long-enough-pw" }, "r"),
     ).rejects.toThrow("already exists");
     await expect(
-      register(
+      signUp(
         db,
         { email: "x@btu.edu.ge", password: "long-enough-pw", firstName: "ნინო", lastName: "B" },
         "r",
       ),
     ).rejects.toThrow("Latin");
+  });
+});
+
+describe("sign-up email codes", () => {
+  const input = { email: "btu-t-0002@btu.edu.ge", password: "long-enough-pw" };
+  beforeEach(() => db.delete(schema.users).where(eq(schema.users.email, input.email)));
+
+  it("creates no account until the emailed code is confirmed", async () => {
+    await expect(register(db, input, "c")).rejects.toThrow("6-digit");
+    await expect(register(db, { ...input, code: "000000" }, "c")).rejects.toThrow("expired");
+    const { devCode } = await startRegistration(db, input, "c");
+    expect(devCode).toMatch(/^\d{6}$/);
+    expect(
+      await db.select().from(schema.users).where(eq(schema.users.email, input.email)),
+    ).toHaveLength(0);
+    const user = await getSessionUser(db, await register(db, { ...input, code: devCode! }, "c"));
+    expect(user).toMatchObject({ studentId: "BTU-T-0002" });
+  });
+
+  it("burns the code after five wrong guesses", async () => {
+    const { devCode } = await startRegistration(db, input, "g");
+    const wrong = devCode === "123456" ? "654321" : "123456";
+    for (let i = 0; i < 5; i++)
+      await expect(register(db, { ...input, code: wrong }, `g${i}`)).rejects.toThrow("not correct");
+    await expect(register(db, { ...input, code: devCode! }, "g9")).rejects.toThrow("expired");
   });
 });
 
@@ -764,7 +831,8 @@ describe("admin panel", () => {
 
 describe("student notifications", () => {
   it("tells the student which skills a new version added", async () => {
-    const { unreadNotifications, markNotificationsRead } = await import("@/server/notifications");
+    const { unreadNotifications, markNotificationsRead } =
+      await import("@/server/core/notifications");
     await runSync(db, await fullWorkbook(), { source: "test" });
     const notes = await unreadNotifications(db, "BTU-T-0001");
     expect(notes[0]).toMatchObject({ title: "Your passport was updated to v2" });
