@@ -91,6 +91,8 @@ const ka: Record<string, string> = {
   "{count} selected": "არჩეულია {count}", "Select all shown": "ნაჩვენების მონიშვნა", "Clear shown": "ნაჩვენების მოხსნა", "Clear all": "ყველას მოხსნა",
   "Search by name, Passport ID or email…": "ძიება სახელით, პასპორტის ID-ით ან ელფოსტით…", "No students match.": "სტუდენტი ვერ მოიძებნა.",
   "Add & issue {count} passports": "დამატება და {count} პასპორტის გაცემა",
+  "Search name, code or version…": "ძიება სახელით, კოდით ან ვერსიით…", "Search code or result…": "ძიება კოდით ან შედეგით…", "Search student, action or status…": "ძიება სტუდენტით, მოქმედებით ან სტატუსით…",
+  From: "თარიღიდან", To: "თარიღამდე", Clear: "გასუფთავება", "Nothing matches these filters.": "ამ ფილტრებით ვერაფერი მოიძებნა.",
 };
 
 type I18nValue = { language: Language; setLanguage: (language: Language) => void; t: (text: string, vars?: Record<string, string | number>) => string };

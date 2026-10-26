@@ -69,6 +69,9 @@ export const addSkillSchema = z.object({
   earnedThrough: z.string().trim().max(120).refine(isPrintable).default(""),
 });
 
+/** Rows sent for the activity, version and check lists; the dashboard searches and filters them by date. */
+const LOG_LIMIT = 300;
+
 export async function getAdminOverview(db: Db, user: SessionUser | null) {
   requireAdmin(user);
 
@@ -92,7 +95,7 @@ export async function getAdminOverview(db: Db, user: SessionUser | null) {
     .from(activityLog)
     .leftJoin(students, eq(students.id, activityLog.studentId))
     .orderBy(desc(activityLog.createdAt), desc(activityLog.id))
-    .limit(15);
+    .limit(LOG_LIMIT);
 
   const runs = await db.select().from(importRuns).orderBy(desc(importRuns.id)).limit(8);
   const failedRecords = await db
@@ -118,7 +121,7 @@ export async function getAdminOverview(db: Db, user: SessionUser | null) {
     .from(passportVersions)
     .innerJoin(students, eq(students.id, passportVersions.studentId))
     .orderBy(desc(passportVersions.id))
-    .limit(15);
+    .limit(LOG_LIMIT);
   const batches = await db.select().from(anchorBatches).orderBy(desc(anchorBatches.id)).limit(8);
   const [queue] = await db
     .select({ n: count() })
@@ -128,7 +131,7 @@ export async function getAdminOverview(db: Db, user: SessionUser | null) {
     .select()
     .from(verificationChecks)
     .orderBy(desc(verificationChecks.createdAt), desc(verificationChecks.id))
-    .limit(10);
+    .limit(LOG_LIMIT);
 
   let provider: ReturnType<typeof getAnchorProvider> = null;
   let providerError: string | null = null;

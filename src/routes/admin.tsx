@@ -55,13 +55,36 @@ function dateTime(iso: string) {
   return new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+/** Local calendar day ("YYYY-MM-DD") of a date-only string or an ISO timestamp, for the date filters. */
+function dayKey(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const d = new Date(value);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+type LogFilter = { q: string; from: string; to: string };
+const NO_FILTER: LogFilter = { q: "", from: "", to: "" };
+
+function matchesFilter(f: LogFilter, date: string, ...text: (string | number | null | undefined)[]) {
+  const day = dayKey(date);
+  if (f.from && day < f.from) return false;
+  if (f.to && day > f.to) return false;
+  const q = f.q.trim().toLowerCase();
+  return !q || text.some((x) => x != null && String(x).toLowerCase().includes(q));
+}
+
 const panel = "panel mt-6 p-5 sm:p-6";
+/** Long lists scroll inside their panel instead of stretching the page. */
+const scrollList = "mt-3 max-h-[28rem] divide-y overflow-y-auto pr-1";
 const button = "rounded-full px-5 py-2 text-sm font-bold uppercase hover:opacity-85 disabled:pointer-events-none disabled:opacity-40";
 
 function Admin() {
   const { t } = useI18n();
   const data = Route.useLoaderData();
   const router = useRouter();
+  const [versionFilter, setVersionFilter] = useState(NO_FILTER);
+  const [checkFilter, setCheckFilter] = useState(NO_FILTER);
+  const [activityFilter, setActivityFilter] = useState(NO_FILTER);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string; problems?: { sheetRow: number; recordId: string; message: string }[] }>();
 
@@ -87,6 +110,15 @@ function Admin() {
   const addSummary = (r: { version: number | null; issued: number; skipped: string[] }) =>
     (r.issued === 1 ? `Skill added. Passport v${r.version} issued.` : `Skill added. ${r.issued} passports issued.`) +
     (r.skipped.length ? ` Skipped (already have it): ${r.skipped.join(", ")}.` : "");
+
+  const versionLabel = (v: Data["versions"][number]) =>
+    v.isCurrent ? "active" : v.status === "anchored" || v.status === "unanchored" ? "superseded" : (VERSION_LABEL[v.status] ?? v.status);
+  const versions = data.versions.filter((v) =>
+    matchesFilter(versionFilter, v.issuedAt, v.student, v.code, v.passportId, `v${v.version}`, versionLabel(v), t(versionLabel(v))));
+  const checks = data.checks.filter((c) =>
+    matchesFilter(checkFilter, c.at, c.code, CHECK_LABEL[c.result] ?? c.result, t(CHECK_LABEL[c.result] ?? c.result)));
+  const activity = data.activity.filter((a) =>
+    matchesFilter(activityFilter, a.at, a.student, a.action, a.passportId, a.version ? `v${a.version}` : null, a.status, t(a.status)));
 
   return (
     <AppShell>
@@ -133,15 +165,17 @@ function Admin() {
         <section className="panel p-5 sm:p-6">
           <h2 className="text-xl">{t("Version history")}</h2>
           <p className="text-xs text-muted-foreground">{t("Latest issued passport versions")}</p>
-          <ul className="mt-3 divide-y">
-            {data.versions.map((v) => (
+          <FilterBar value={versionFilter} onChange={setVersionFilter} placeholder={t("Search name, code or version…")} />
+          {versions.length === 0 && data.versions.length > 0 && <p className="mt-3 text-sm text-muted-foreground">{t("Nothing matches these filters.")}</p>}
+          <ul className={scrollList}>
+            {versions.map((v) => (
               <li key={v.id} className="flex items-center justify-between gap-3 py-3 text-sm">
                 <span className="min-w-0">
                   <b className="font-display">v{v.version}</b> · {v.student} · {formatDate(v.issuedAt)}
                   <span className="block truncate font-mono text-xs text-muted-foreground">{v.code} · {t("{count} skills", { count: v.skillCount })}</span>
                 </span>
                 <span className={`shrink-0 rounded-sm px-2 py-0.5 text-[11px] font-bold uppercase ${v.isCurrent ? "bg-success text-destructive-foreground" : "bg-muted text-muted-foreground"}`}>
-                  {t(v.isCurrent ? "active" : v.status === "anchored" || v.status === "unanchored" ? "superseded" : (VERSION_LABEL[v.status] ?? v.status))}
+                  {t(versionLabel(v))}
                 </span>
               </li>
             ))}
@@ -149,9 +183,11 @@ function Admin() {
         </section>
         <section className="panel p-5 sm:p-6">
           <h2 className="text-xl">{t("Verification checks")}</h2>
+          <FilterBar value={checkFilter} onChange={setCheckFilter} placeholder={t("Search code or result…")} />
           {data.checks.length === 0 && <p className="mt-3 text-sm text-muted-foreground">{t("No verification checks yet.")}</p>}
-          <ul className="mt-3 divide-y">
-            {data.checks.map((c) => (
+          {checks.length === 0 && data.checks.length > 0 && <p className="mt-3 text-sm text-muted-foreground">{t("Nothing matches these filters.")}</p>}
+          <ul className={scrollList}>
+            {checks.map((c) => (
               <li key={c.id} className="flex items-center justify-between gap-3 py-3 text-sm">
                 <span className="font-mono">{c.code}</span>
                 <span className="text-muted-foreground">{dateTime(c.at)}</span>
@@ -164,8 +200,10 @@ function Admin() {
 
       <section className={panel}>
         <h2 className="text-xl">{t("Recent activity")}</h2>
-        <ul className="mt-3 divide-y">
-          {data.activity.map((a) => (
+        <FilterBar value={activityFilter} onChange={setActivityFilter} placeholder={t("Search student, action or status…")} />
+        {activity.length === 0 && data.activity.length > 0 && <p className="mt-3 text-sm text-muted-foreground">{t("Nothing matches these filters.")}</p>}
+        <ul className={scrollList}>
+          {activity.map((a) => (
             <li key={a.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3">
               <div className="min-w-0">
                 <p className="truncate font-bold">{a.student} · <span className="font-normal">{a.action}</span></p>
@@ -177,6 +215,27 @@ function Admin() {
         </ul>
       </section>
     </AppShell>
+  );
+}
+
+/** Text search plus an optional from/to day range for one of the dashboard's log lists. */
+function FilterBar({ value, onChange, placeholder }: { value: LogFilter; onChange: (f: LogFilter) => void; placeholder: string }) {
+  const { t } = useI18n();
+  const input = "rounded-xl border bg-background px-3 py-2 text-sm font-normal";
+  const active = value.q || value.from || value.to;
+  return (
+    <div className="mt-3 flex flex-wrap items-end gap-2">
+      <input type="search" value={value.q} onChange={(e) => onChange({ ...value, q: e.target.value })} placeholder={placeholder} aria-label={placeholder} className={`${input} min-w-0 flex-1 basis-48`} />
+      <label className="text-xs font-bold uppercase text-muted-foreground">
+        {t("From")}
+        <input type="date" value={value.from} max={value.to || undefined} onChange={(e) => onChange({ ...value, from: e.target.value })} className={`${input} mt-1 block`} />
+      </label>
+      <label className="text-xs font-bold uppercase text-muted-foreground">
+        {t("To")}
+        <input type="date" value={value.to} min={value.from || undefined} onChange={(e) => onChange({ ...value, to: e.target.value })} className={`${input} mt-1 block`} />
+      </label>
+      {active && <button type="button" onClick={() => onChange(NO_FILTER)} className="py-2 text-sm underline underline-offset-4 hover:opacity-70">{t("Clear")}</button>}
+    </div>
   );
 }
 

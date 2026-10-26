@@ -52,6 +52,41 @@ No. Students see only their own. Admin actions are checked on the server, not ju
 **Can BTU replace Google Sheets later?**
 Yes. The data source, the blockchain network and the PDF design are each in their own module. Switching networks is one setting.
 
+## How each part works (in simple words)
+
+**How is a PDF compared to the original?**
+1. When BTU issues a passport, the server computes the PDF's **SHA-256 fingerprint**: a 64-character code calculated from every byte of the file. It is saved with that version, signed by BTU and put on-chain.
+2. When someone drops a PDF on `/verify`, their **browser** computes the same fingerprint. The file itself is never uploaded.
+3. The server looks up that fingerprint. Same fingerprint = the exact same file, byte for byte ("PDF matches"). Any change, even one character, gives a completely different fingerprint ("PDF modified").
+4. The stored fingerprint cannot be quietly swapped either: it is part of what BTU signed and what is on the blockchain, so changing it breaks those checks.
+
+**How does the verification code work?**
+Each passport version gets its own random code (like `BTU-BEY6-62E7-SAZ5`), printed on the PDF and inside its QR code. Typing it or scanning the QR opens that exact version on `/verify`. It reveals only initials, a masked Passport ID and the skill count, never the email or skill details.
+
+**What are the 4 checks on `/verify`?**
+1. **Official record:** the code exists and the version was officially issued.
+2. **Issuer:** BTU's digital signature is valid and comes from the key BTU publishes.
+3. **Blockchain:** the version is inside the batch recorded on Ethereum, and that transaction was sent by BTU's address.
+4. **PDF file** (if one is dropped in): its fingerprint matches the original.
+
+**How does the blockchain part work?**
+After a sync, each new passport version becomes one short fingerprint. All of them are combined into one "root" fingerprint (a Merkle tree, like a family tree of fingerprints), and only that root is sent to Ethereum in **one transaction**. Each passport keeps a small "proof" showing it belongs to that root, so it can be checked on its own.
+
+**How does the BTU signature work?**
+BTU has a private key, like a digital stamp only BTU holds. Each passport version is stamped with it. Anyone can check the stamp with BTU's public key, which is published in BTU's identity file (`/.well-known/did.json`). A forged passport cannot carry a valid stamp.
+
+**How does the sync from Google Sheets / Excel work?**
+The system reads every row and checks it: Student ID exists, name matches, status is CONFIRMED, skill and date are valid. Good rows go onto the right passport and create a new version. Bad rows are stopped and listed with the reason. Each row has a Record ID, so syncing twice never adds it twice.
+
+**How do versions work?**
+Every change creates a new version (v1, v2, v3…) with its own code and PDF. The newest is "active". Older ones stay valid but show "superseded", so an employer holding an old PDF learns a newer one exists.
+
+**How do students get access?**
+Students sign in with a BTU Google account or a BTU email. Self sign-ups wait in the admin's approval queue, so only real BTU students get a passport.
+
+**What does the admin see?**
+Counts, sync results and problem rows, the approval queue, the blockchain queue, and searchable logs of versions, verification checks and activity, with date filters.
+
 ## Known limitations
 
 - Runs on Ethereum's **test network** (Sepolia). Moving to mainnet or a cheaper L2 is one setting.
