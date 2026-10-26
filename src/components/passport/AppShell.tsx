@@ -10,6 +10,10 @@ const nav = [
   { to: "/admin", label: "Admin" },
 ] as const;
 
+// Menu pills: unselected items get a soft grey pill on hover; the selected one stays black.
+const item = "rounded-full px-2 py-1.5 sm:px-3 text-xs font-bold uppercase tracking-wide whitespace-nowrap transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground";
+const idle = "text-muted-foreground hover:bg-secondary hover:text-foreground";
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const session = useSession();
@@ -23,31 +27,30 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       <header className="no-print border-b bg-card">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <Link to="/" className="flex min-w-0 items-center gap-3">
+        {/* Phones and small tablets: logo + language on the first row, menu on its own row. md and up: one row. */}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+          <Link to="/" className="mr-auto flex min-w-0 items-center gap-3">
             <span className="font-display text-2xl leading-none">BTU</span>
             <span className="hidden border-l pl-3 text-[10px] font-semibold uppercase leading-tight text-muted-foreground sm:block">
               {t("Business and")}<br />{t("Technology University")}
             </span>
           </Link>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-          <nav className="flex gap-1">
+          <nav className="order-last flex w-full flex-wrap gap-1 md:order-none md:w-auto">
             {links.map((n) => (
               <Link key={n.to} to={n.to} activeOptions={{ exact: true }}
-                className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide"
-                inactiveProps={{ className: "text-muted-foreground hover:text-foreground" }}
+                className={item}
+                inactiveProps={{ className: idle }}
                 activeProps={{ className: "bg-foreground text-background" }}>
                 {t(n.label)}
               </Link>
             ))}
             {session ? (
-              <button type="button" onClick={() => void handleSignOut()} className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground hover:text-foreground">{t("Log out")}</button>
+              <button type="button" onClick={() => void handleSignOut()} className={`${item} ${idle}`}>{t("Log out")}</button>
             ) : (
-              <Link to="/auth" activeOptions={{ exact: true }} className="rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground hover:text-foreground">{t("Sign in")}</Link>
+              <Link to="/auth" activeOptions={{ exact: true }} className={item} inactiveProps={{ className: idle }} activeProps={{ className: "bg-foreground text-background" }}>{t("Sign in")}</Link>
             )}
           </nav>
           <LanguageToggle />
-          </div>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6 sm:py-10">{children}</main>

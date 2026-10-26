@@ -95,9 +95,9 @@ function AuthorizationPage() {
       <div className="mx-auto flex max-w-6xl items-center justify-between">
         <Link to="/" className="flex items-center gap-3" aria-label="BTU passport home">
           <span className="font-display text-2xl leading-none">BTU</span>
-          <span className="border-l border-foreground/20 pl-3 text-[10px] font-semibold uppercase leading-tight text-muted-foreground">{t("Business and")}<br />{t("Technology University")}</span>
+          <span className="hidden border-l border-foreground/20 pl-3 text-[10px] sm:block font-semibold uppercase leading-tight text-muted-foreground">{t("Business and")}<br />{t("Technology University")}</span>
         </Link>
-        <div className="flex items-center gap-4"><Link to="/verify" search={{ code: undefined }} className="text-xs font-bold uppercase tracking-wide underline underline-offset-4">{t("Verify a passport")}</Link><LanguageToggle /></div>
+        <div className="flex items-center gap-2"><Link to="/verify" search={{ code: undefined }} className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">{t("Verify a passport")}</Link><LanguageToggle /></div>
       </div>
 
       <div className="mx-auto mt-8 grid max-w-6xl overflow-hidden rounded-[2rem] border border-foreground/10 bg-card shadow-xl md:mt-12 md:min-h-[620px] md:grid-cols-[0.9fr_1.1fr]">

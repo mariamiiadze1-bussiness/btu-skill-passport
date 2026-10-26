@@ -87,7 +87,7 @@ function Verify() {
               <h1 className="text-3xl leading-none sm:text-4xl">{t("Verify a Passport")}</h1>
               <p className="mt-2 text-sm text-muted-foreground">{t("Enter the verification code printed on the passport cover, scan its QR code, or check the PDF file itself.")}</p>
             </div>
-            <Asterisks />
+            <div className="hidden sm:block"><Asterisks /></div>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); void submit(input); }} className="mt-6 flex flex-col gap-3 sm:flex-row">
             <label htmlFor="code" className="sr-only">{t("Verification code")}</label>

@@ -134,7 +134,7 @@ export function LanguageToggle() {
     <div className="flex items-center rounded-full border p-0.5 text-[11px] font-bold" aria-label="Language">
       {(["en", "ka"] as const).map((code) => (
         <button key={code} type="button" lang={code} aria-pressed={language === code} onClick={() => setLanguage(code)}
-          className={`rounded-full px-2.5 py-1 transition-colors ${language === code ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>
+          className={`rounded-full px-2.5 py-1 transition-colors ${language === code ? "bg-foreground text-background" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}>
           {code === "en" ? "EN" : "ქარ"}
         </button>
       ))}
