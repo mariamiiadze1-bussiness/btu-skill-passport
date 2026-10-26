@@ -93,8 +93,8 @@ function Verify() {
             <label htmlFor="code" className="sr-only">{t("Verification code")}</label>
             <input id="code" value={input} onChange={(e) => setInput(e.target.value)} placeholder="BTU-XXXX-XXXX-XXXX" maxLength={64} autoComplete="off" spellCheck={false}
               className="min-w-0 flex-1 rounded-full border-2 border-foreground bg-card px-5 py-3 font-mono text-lg uppercase outline-none focus:ring-4 focus:ring-ring/40" />
-            <button className="rounded-full bg-foreground px-6 py-3 font-bold uppercase text-background">{t("Verify")}</button>
-            <button type="button" onClick={() => setScanning((s) => !s)} aria-pressed={scanning} className="rounded-full bg-primary px-6 py-3 font-bold uppercase text-primary-foreground">
+            <button className="rounded-full bg-foreground px-6 py-3 font-bold uppercase text-background hover:opacity-85 disabled:pointer-events-none">{t("Verify")}</button>
+            <button type="button" onClick={() => setScanning((s) => !s)} aria-pressed={scanning} className="rounded-full bg-primary px-6 py-3 font-bold uppercase text-primary-foreground hover:brightness-95">
               {scanning ? t("Scanning…") : t("Scan QR")}
             </button>
           </form>
@@ -104,7 +104,7 @@ function Verify() {
               <span className="font-bold">{checkingFile ? t("Checking the file…") : t("Check a PDF file")}</span>
               <span className="block text-xs text-muted-foreground">{t("Proves the file was not changed. The file stays on your device; only its fingerprint is checked.")}</span>
             </span>
-            <span className="rounded-full border-2 border-foreground px-4 py-1.5 text-xs font-bold uppercase">{t("Choose PDF")}</span>
+            <span className="rounded-full border-2 border-foreground px-4 py-1.5 text-xs font-bold uppercase hover:bg-secondary">{t("Choose PDF")}</span>
             <input type="file" accept="application/pdf,.pdf" onChange={(e) => void handleFile(e)} className="sr-only" />
           </label>
           <p className="mt-3 text-xs text-muted-foreground">{t("The verification code (BTU-XXXX-XXXX-XXXX) is different from the Passport ID: each issued version has its own code.")}</p>

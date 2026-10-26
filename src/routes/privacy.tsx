@@ -34,7 +34,7 @@ const SECTIONS: [string, string[]][] = [
 function Privacy() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 sm:py-16">
-      <Link to="/auth" className="text-xs font-bold uppercase tracking-wide underline underline-offset-4">
+      <Link to="/auth" className="text-xs font-bold uppercase tracking-wide underline underline-offset-4 hover:opacity-70">
         ← BTU AI Skills Passport
       </Link>
       <h1 className="mt-6 text-4xl">Privacy</h1>

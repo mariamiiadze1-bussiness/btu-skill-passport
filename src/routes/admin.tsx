@@ -56,7 +56,7 @@ function dateTime(iso: string) {
 }
 
 const panel = "panel mt-6 p-5 sm:p-6";
-const button = "rounded-full px-5 py-2 text-sm font-bold uppercase disabled:opacity-40";
+const button = "rounded-full px-5 py-2 text-sm font-bold uppercase hover:opacity-85 disabled:pointer-events-none disabled:opacity-40";
 
 function Admin() {
   const { t } = useI18n();

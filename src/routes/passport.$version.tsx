@@ -31,7 +31,7 @@ function PassportDoc() {
         <div className="panel mx-auto max-w-2xl p-8">
           <h1 className="text-3xl">{t("Your passport is private")}</h1>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">{t("Sign in with your BTU student account to view and download your passport.")}</p>
-          <Link to="/auth" search={{}} className="mt-5 inline-flex rounded-full bg-foreground px-5 py-2.5 text-sm font-bold uppercase text-background">{t("Sign in or register")}</Link>
+          <Link to="/auth" search={{}} className="mt-5 inline-flex rounded-full bg-foreground px-5 py-2.5 text-sm font-bold uppercase text-background hover:opacity-85">{t("Sign in or register")}</Link>
         </div>
       </main>
     );
@@ -42,10 +42,10 @@ function PassportDoc() {
     <main className="flex min-h-screen flex-col bg-[#29292c] p-4 text-white sm:p-6">
       <div className="mx-auto mb-4 flex w-full max-w-[1400px] flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
-          <Link to="/" className="text-sm font-bold uppercase underline underline-offset-4">{t("← Back to dashboard")}</Link>
+          <Link to="/" className="text-sm font-bold uppercase underline underline-offset-4 hover:opacity-70">{t("← Back to dashboard")}</Link>
           <LanguageToggle />
         </div>
-        <a href={`${src}?download`} className="rounded-full bg-primary px-5 py-2 text-sm font-bold uppercase text-primary-foreground">{t("Download / Save as PDF")}</a>
+        <a href={`${src}?download`} className="rounded-full bg-primary px-5 py-2 text-sm font-bold uppercase text-primary-foreground hover:brightness-95">{t("Download / Save as PDF")}</a>
       </div>
       <section aria-label={t("Passport PDF preview")} className="mx-auto flex w-full max-w-[1400px] flex-1 overflow-hidden rounded-xl bg-[#39393c]">
         <object data={src} type="application/pdf" className="min-h-[75vh] w-full flex-1">

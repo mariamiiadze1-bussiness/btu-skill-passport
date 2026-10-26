@@ -29,7 +29,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="no-print border-b bg-card">
         {/* Phones and small tablets: logo + language on the first row, menu on its own row. md and up: one row. */}
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
-          <Link to="/" className="mr-auto flex min-w-0 items-center gap-3">
+          <Link to="/" className="mr-auto flex min-w-0 items-center gap-3 hover:opacity-70">
             <span className="font-display text-2xl leading-none">BTU</span>
             <span className="hidden border-l pl-3 text-[10px] font-semibold uppercase leading-tight text-muted-foreground sm:block">
               {t("Business and")}<br />{t("Technology University")}
