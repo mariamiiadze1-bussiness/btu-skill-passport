@@ -27,7 +27,7 @@ export function Asterisks({ n = 3, vertical = false }: { n?: number; vertical?: 
 export function BrandTag({ className }: { className?: string }) {
   const { t } = useI18n();
   return (
-    <div className={cn("inline-block bg-primary px-3 py-1.5 font-display text-xs uppercase leading-tight text-primary-foreground", className)}>
+    <div className={cn("inline-block rounded-lg bg-primary px-3 py-1.5 font-display text-xs uppercase leading-tight text-primary-foreground", className)}>
       <span className="font-sans font-semibold">{t("AI Skills")}</span><br />{t("Digital Passport")}
     </div>
   );

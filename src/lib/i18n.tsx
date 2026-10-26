@@ -87,6 +87,10 @@ const ka: Record<string, string> = {
   "Your Passport ID is reserved. BTU issues your passport officially once your student record is confirmed in BTU's registry.": "თქვენი პასპორტის ID დაჯავშნილია. BTU პასპორტს ოფიციალურად გასცემს, როგორც კი თქვენი სტუდენტური ჩანაწერი BTU-ის რეესტრში დადასტურდება.",
   "No verified skills yet. They appear here as BTU confirms them.": "დადასტურებული უნარები ჯერ არ არის. ისინი აქ გამოჩნდება, როგორც კი BTU მათ დაადასტურებს.",
   "Skills appear here once BTU issues your passport.": "უნარები გამოჩნდება, როგორც კი BTU პასპორტს გასცემს.",
+  "For awards not in the sheet. Pick one or more students; each passport is updated, re-issued and anchored right away.": "ცხრილში არარსებული ჯილდოებისთვის. აირჩიეთ ერთი ან რამდენიმე სტუდენტი; თითოეული პასპორტი მაშინვე განახლდება, ხელახლა გაიცემა და ბლოკჩეინზე დაფიქსირდება.",
+  "{count} selected": "არჩეულია {count}", "Select all shown": "ნაჩვენების მონიშვნა", "Clear shown": "ნაჩვენების მოხსნა", "Clear all": "ყველას მოხსნა",
+  "Search by name, Passport ID or email…": "ძიება სახელით, პასპორტის ID-ით ან ელფოსტით…", "No students match.": "სტუდენტი ვერ მოიძებნა.",
+  "Add & issue {count} passports": "დამატება და {count} პასპორტის გაცემა",
 };
 
 type I18nValue = { language: Language; setLanguage: (language: Language) => void; t: (text: string, vars?: Record<string, string | number>) => string };

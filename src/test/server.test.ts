@@ -896,6 +896,40 @@ describe("admin panel", () => {
     ).rejects.toThrow("already on this passport");
   });
 
+  it("adds one skill to several students in a single blockchain batch", async () => {
+    const batchCount = async () => (await db.select().from(schema.anchorBatches)).length;
+    const before = await batchCount();
+    const r = await addSkill(db, admin, {
+      studentIds: ["BTU-T-0004", "BTU-T-0005", "BTU-T-0006"],
+      name: "Team AI Hackathon",
+      category: "AI Skill",
+      description: "Built an AI prototype in a team.",
+      dateEarned: "2026-10-22",
+    });
+    expect(r.issued).toBe(3);
+    expect(r.skipped).toEqual([]);
+    for (const id of ["BTU-T-0004", "BTU-T-0005", "BTU-T-0006"])
+      expect((await passport(id)).versions[0]!.skills.map((s) => s.name)).toContain(
+        "Team AI Hackathon",
+      );
+    expect(await batchCount()).toBe(before + 1);
+
+    const [award] = await db
+      .select()
+      .from(schema.skills)
+      .where(eq(schema.skills.name, "Team AI Hackathon"));
+    const again = await addSkill(db, admin, {
+      studentIds: ["BTU-T-0004", "BTU-T-0007"],
+      catalogSkillId: award!.catalogSkillId!,
+      dateEarned: "2026-10-23",
+    });
+    expect(again.issued).toBe(1);
+    expect(again.skipped).toHaveLength(1);
+    await expect(
+      addSkill(db, admin, { studentIds: [], catalogSkillId: "SKL-001", dateEarned: "2026-10-23" }),
+    ).rejects.toThrow("at least one student");
+  });
+
   it("rejects injected input", async () => {
     for (const p of INJECTIONS) {
       await expect(

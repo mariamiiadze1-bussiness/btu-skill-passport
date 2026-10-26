@@ -58,7 +58,9 @@ const printable = (max: number) =>
     .max(max)
     .refine(isPrintable, "Use Latin characters only (the passport font cannot print others).");
 export const addSkillSchema = z.object({
-  studentId: id,
+  // One student (studentId) or several at once (studentIds); both end up in studentIds.
+  studentId: id.optional(),
+  studentIds: z.array(id).max(500).optional(),
   catalogSkillId: id.optional(),
   name: printable(80).optional(),
   category: z.string().refine(isSkillCategory, "Pick a valid category.").optional(),
@@ -296,14 +298,21 @@ export async function rejectStudent(db: Db, user: SessionUser | null, studentId:
   return { rejected: id };
 }
 
-/** BTU staff add an award by hand (e.g. a one-off activity); the passport updates at once. */
+/** BTU staff add an award by hand (e.g. a one-off activity) to one or many students; passports update at once. */
 export async function addSkill(db: Db, user: SessionUser | null, input: unknown) {
   requireAdmin(user);
   const data = addSkillSchema.parse(input);
-  const [student] = await db.select().from(students).where(eq(students.id, data.studentId));
-  if (!student) throw new UserError("Student not found.");
-  if (student.status === PENDING_APPROVAL)
-    throw new UserError("Approve this student first (Waiting for approval, above).");
+  const ids = [
+    ...new Set([...(data.studentIds ?? []), ...(data.studentId ? [data.studentId] : [])]),
+  ];
+  if (!ids.length) throw new UserError("Choose at least one student.");
+  const found = await db.select().from(students).where(inArray(students.id, ids));
+  if (found.length !== ids.length) throw new UserError("Student not found.");
+  const waiting = found.filter((s) => s.status === PENDING_APPROVAL);
+  if (waiting.length)
+    throw new UserError(
+      `Approve ${ids.length === 1 ? "this student" : waiting.map((s) => `${s.firstName} ${s.lastName}`).join(", ")} first (Waiting for approval, above).`,
+    );
 
   let catalog = data.catalogSkillId
     ? (await db.select().from(skillCatalog).where(eq(skillCatalog.id, data.catalogSkillId)))[0]
@@ -324,43 +333,65 @@ export async function addSkill(db: Db, user: SessionUser | null, input: unknown)
       })
       .returning();
   }
-  const [duplicate] = await db
-    .select({ id: skills.id })
-    .from(skills)
-    .where(
-      and(
-        eq(skills.studentId, student.id),
-        eq(skills.catalogSkillId, catalog!.id),
-        ne(skills.status, "rejected"),
-      ),
+  const skill = catalog!;
+  const holders = new Set(
+    (
+      await db
+        .select({ studentId: skills.studentId })
+        .from(skills)
+        .where(
+          and(
+            inArray(skills.studentId, ids),
+            eq(skills.catalogSkillId, skill.id),
+            ne(skills.status, "rejected"),
+          ),
+        )
+    ).map((r) => r.studentId),
+  );
+  const targets = found.filter((s) => !holders.has(s.id));
+  if (!targets.length)
+    throw new UserError(
+      `${skill.name} is already on ${ids.length === 1 ? "this passport" : "every selected passport"}.`,
     );
-  if (duplicate) throw new UserError(`${catalog!.name} is already on this passport.`);
 
-  const recordId = `REC-M${Date.now().toString(36).toUpperCase()}`;
-  await db.insert(skills).values({
-    id: recordId,
-    studentId: student.id,
-    catalogSkillId: catalog!.id,
-    name: catalog!.name,
-    category: catalog!.category,
-    badgeCode: catalog!.badgeCode,
-    description: catalog!.description,
-    dateEarned: data.dateEarned,
-    earnedThrough: data.earnedThrough,
-    source: "admin",
-    status: "approved",
-    reviewedBy: user.id,
-    reviewedAt: new Date(),
-  });
-  await db.insert(activityLog).values({
-    studentId: student.id,
-    actorUserId: user.id,
-    action: `Skill added: ${catalog!.name}`,
-    status: "completed",
-  });
-  const [issued] = await issueVersions(db, [student.id]);
+  const stamp = Date.now().toString(36).toUpperCase();
+  await db.insert(skills).values(
+    targets.map((student, i) => ({
+      id: targets.length === 1 ? `REC-M${stamp}` : `REC-M${stamp}-${i + 1}`,
+      studentId: student.id,
+      catalogSkillId: skill.id,
+      name: skill.name,
+      category: skill.category,
+      badgeCode: skill.badgeCode,
+      description: skill.description,
+      dateEarned: data.dateEarned,
+      earnedThrough: data.earnedThrough,
+      source: "admin",
+      status: "approved" as const,
+      reviewedBy: user.id,
+      reviewedAt: new Date(),
+    })),
+  );
+  await db.insert(activityLog).values(
+    targets.map((student) => ({
+      studentId: student.id,
+      actorUserId: user.id,
+      action: `Skill added: ${skill.name}`,
+      status: "completed" as const,
+    })),
+  );
+  // All passports go into one Merkle batch, so one blockchain transaction covers the whole group.
+  const issued = await issueVersions(
+    db,
+    targets.map((s) => s.id),
+  );
   const anchor = await anchorPending(db);
-  return { version: issued?.version ?? null, anchorError: anchor.error };
+  return {
+    version: issued[0]?.version ?? null,
+    issued: issued.length,
+    skipped: found.filter((s) => holders.has(s.id)).map((s) => `${s.firstName} ${s.lastName}`),
+    anchorError: anchor.error,
+  };
 }
 
 /** Retry queue: anchors anything still pending and finishes submitted transactions. */

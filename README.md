@@ -2,7 +2,7 @@
 
 A permanent, versioned, blockchain-verifiable digital passport of the AI skills BTU confirms for its students. BTU adds verified skills in Google Sheets (or an Excel file). The system updates the right student's passport, builds the official PDF on BTU's design, anchors it on Ethereum, and lets anyone verify it without an account.
 
-Architecture, blockchain design, and how each hackathon requirement is met: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. Step-by-step demo of the 14 test scenarios: **[docs/DEMO.md](docs/DEMO.md)**.
+Architecture, blockchain design, and how each hackathon requirement is met: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. Step-by-step demo of the 14 test scenarios: **[docs/DEMO.md](docs/DEMO.md)**. Jury briefing (work completed + likely questions with answers): **[docs/JUDGES.md](docs/JUDGES.md)**.
 
 This project was built with [Lovable](https://lovable.dev). Continue in the [Lovable editor](https://lovable.dev/projects/020ec0f1-82f4-4b2f-b404-1520a4c9979e); commits to `main` sync back to Lovable.
 

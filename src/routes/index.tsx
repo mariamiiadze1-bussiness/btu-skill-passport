@@ -180,15 +180,16 @@ function Dashboard() {
             {skills.map((skill) => {
               const type = passportSkillType(skill.category);
               return (
-                <article key={skill.id} className="panel flex flex-col p-5">
-                  <div className="mb-4 flex items-start justify-between gap-3">
+                // Subgrid rows line up the title, type, description and badge code across each row of cards.
+                <article key={skill.id} className="panel row-span-6 grid grid-rows-subgrid gap-0 p-5">
+                  <div className="mb-4 flex h-16 items-start justify-between gap-3">
                     <span className="text-xs font-bold text-muted-foreground">{formatDate(skill.dateEarned, language)}</span>
                     <Stamp type={type} />
                   </div>
                   <h3 className="text-lg leading-tight">{t(skill.name)}</h3>
                   <p className="mt-1 text-xs font-bold uppercase text-primary">{t(TYPE_LABEL[type])}</p>
-                  <p className="mt-3 flex-1 text-sm text-muted-foreground">{t(skill.description)}</p>
-                  {skill.earnedThrough && <p className="mt-3 text-xs"><span className="font-bold">{t("Earned through:")}</span> {t(skill.earnedThrough)}</p>}
+                  <p className="mt-3 text-sm text-muted-foreground">{t(skill.description)}</p>
+                  {skill.earnedThrough ? <p className="mt-3 text-xs"><span className="font-bold">{t("Earned through:")}</span> {t(skill.earnedThrough)}</p> : <span />}
                   <p className="mt-4 border-t pt-3 text-xs font-semibold">{t("Badge code:")} <span className="font-mono">{skill.badgeCode}</span></p>
                 </article>
               );

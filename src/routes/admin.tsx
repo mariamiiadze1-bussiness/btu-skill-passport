@@ -84,6 +84,10 @@ function Admin() {
   const syncSummary = (r: { totals: { synced: number; alreadySynced: number; skipped: number; failed: number; versions: number } }) =>
     `Sync finished: ${r.totals.synced} new records, ${r.totals.versions} passports updated, ${r.totals.failed} failed, ${r.totals.skipped} skipped, ${r.totals.alreadySynced} already on passports.`;
 
+  const addSummary = (r: { version: number | null; issued: number; skipped: string[] }) =>
+    (r.issued === 1 ? `Skill added. Passport v${r.version} issued.` : `Skill added. ${r.issued} passports issued.`) +
+    (r.skipped.length ? ` Skipped (already have it): ${r.skipped.join(", ")}.` : "");
+
   return (
     <AppShell>
       <h1 className="text-3xl sm:text-4xl">{t("Admin Dashboard")}</h1>
@@ -120,7 +124,7 @@ function Admin() {
         onApprove={(studentId) => run(`approve:${studentId}`, () => approveSignUp({ data: { studentId } }), () => "Student approved. You can now add their skills below.")}
         onReject={(studentId) => run(`reject:${studentId}`, () => rejectSignUp({ data: { studentId } }), () => "Sign-up removed.")} />
 
-      <AddSkillPanel data={data} busy={busy} onSubmit={(values) => run("add", () => addStudentSkill({ data: values }), (r: { version: number | null }) => `Skill added. Passport v${r.version} issued.`)} />
+      <AddSkillPanel data={data} busy={busy} onSubmit={(values) => run("add", () => addStudentSkill({ data: values }), addSummary)} />
 
 
       <BlockchainPanel data={data} busy={busy} onRetry={() => run("anchor", () => retryBlockchain(), (r: { anchored: number; unanchored: number; error: string | null }) => r.error ?? `${r.anchored + r.unanchored} versions finalized.`)} />
@@ -276,14 +280,33 @@ function ApprovalPanel({ data, busy, onApprove, onReject }: { data: Data; busy: 
   );
 }
 
-function AddSkillPanel({ data, busy, onSubmit }: { data: Data; busy: string | undefined; onSubmit: (values: Record<string, string>) => void }) {
+function AddSkillPanel({ data, busy, onSubmit }: { data: Data; busy: string | undefined; onSubmit: (values: Record<string, unknown>) => void }) {
   const { t } = useI18n();
   const [catalogSkillId, setCatalogSkillId] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
   const field = "mt-1 w-full rounded-xl border bg-background px-3 py-2 text-sm font-normal";
+  const approved = data.students.filter((s) => !s.pending);
+  const query = search.trim().toLowerCase();
+  const shown = query ? approved.filter((s) => `${s.name} ${s.passportId} ${s.email}`.toLowerCase().includes(query)) : approved;
+  const allShown = shown.length > 0 && shown.every((s) => selected.has(s.id));
+
+  function toggle(ids: string[], on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
+    if (!selected.size) return;
+    const values: Record<string, unknown> = Object.fromEntries(new FormData(event.currentTarget));
+    values["studentIds"] = [...selected];
     if (values["catalogSkillId"]) {
       delete values["name"];
       delete values["category"];
@@ -295,15 +318,31 @@ function AddSkillPanel({ data, busy, onSubmit }: { data: Data; busy: string | un
   return (
     <section className={panel}>
       <h2 className="text-xl">{t("Add a skill to a passport")}</h2>
-      <p className="text-sm text-muted-foreground">{t("For awards not in the sheet. The student's passport is updated, re-issued and anchored right away.")}</p>
+      <p className="text-sm text-muted-foreground">{t("For awards not in the sheet. Pick one or more students; each passport is updated, re-issued and anchored right away.")}</p>
       <form onSubmit={submit} className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <label className="text-sm font-semibold">
-          {t("Student")}
-          <select name="studentId" required className={field} defaultValue="">
-            <option value="" disabled>{t("Choose a student…")}</option>
-            {data.students.filter((s) => !s.pending).map((s) => <option key={s.id} value={s.id}>{s.name} · {s.passportId}{s.version ? ` · v${s.version}` : ""}</option>)}
-          </select>
-        </label>
+        <fieldset className="text-sm font-semibold sm:col-span-2 lg:col-span-3">
+          <legend className="flex w-full flex-wrap items-center justify-between gap-2">
+            <span>{t("Students")} <span className="font-normal text-muted-foreground">· {t("{count} selected", { count: selected.size })}</span></span>
+            <span className="flex gap-3 text-xs font-bold uppercase">
+              <button type="button" disabled={!shown.length} onClick={() => toggle(shown.map((s) => s.id), !allShown)} className="underline underline-offset-4 disabled:opacity-40">
+                {allShown ? t("Clear shown") : t("Select all shown")}
+              </button>
+              {selected.size > 0 && <button type="button" onClick={() => setSelected(new Set())} className="underline underline-offset-4">{t("Clear all")}</button>}
+            </span>
+          </legend>
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("Search by name, Passport ID or email…")} className={field} />
+          <ul className="mt-2 grid max-h-56 gap-x-4 overflow-auto rounded-xl border p-2 font-normal sm:grid-cols-2 lg:grid-cols-3">
+            {shown.map((s) => (
+              <li key={s.id}>
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-secondary">
+                  <input type="checkbox" checked={selected.has(s.id)} onChange={(e) => toggle([s.id], e.target.checked)} className="size-4 shrink-0 accent-primary" />
+                  <span className="min-w-0 truncate">{s.name} <span className="font-mono text-xs text-muted-foreground">· {s.passportId}{s.version ? ` · v${s.version}` : ""}</span></span>
+                </label>
+              </li>
+            ))}
+            {!shown.length && <li className="px-2 py-1.5 text-muted-foreground">{t("No students match.")}</li>}
+          </ul>
+        </fieldset>
         <label className="text-sm font-semibold">
           {t("Skill")}
           <select name="catalogSkillId" value={catalogSkillId} onChange={(e) => setCatalogSkillId(e.target.value)} className={field}>
@@ -339,7 +378,9 @@ function AddSkillPanel({ data, busy, onSubmit }: { data: Data; busy: string | un
           <input name="earnedThrough" maxLength={120} placeholder="e.g. AI Automation Bootcamp (3-day intensive)" className={field} />
         </label>
         <div className="flex items-end">
-          <button disabled={!!busy} className={`${button} w-full bg-primary text-primary-foreground`}>{busy === "add" ? t("Issuing…") : t("Add & issue passport")}</button>
+          <button disabled={!!busy || !selected.size} className={`${button} w-full bg-primary text-primary-foreground`}>
+            {busy === "add" ? t("Issuing…") : selected.size > 1 ? t("Add & issue {count} passports", { count: selected.size }) : t("Add & issue passport")}
+          </button>
         </div>
       </form>
     </section>
